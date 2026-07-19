@@ -1,0 +1,264 @@
+=============================================================
+      CAPTIONGRIT — FAQ & TROUBLESHOOTING
+=============================================================
+
+
+=============================================================
+  FREQUENTLY ASKED QUESTIONS
+=============================================================
+
+
+Q: Is Captiongrit free to use?
+A: The plugin itself requires a paid license. However, the
+   AI services it uses (ElevenLabs, Gemini, Groq, etc.) all
+   offer generous free tiers, so you can generate captions
+   without paying for API usage.
+
+
+Q: Does it work in both After Effects AND Premiere Pro?
+A: Yes! Captiongrit works in both Adobe After Effects
+   (CC 2019+) and Adobe Premiere Pro (CC 2019+).
+
+
+Q: What languages are supported?
+A: 24 languages including Telugu, Hindi, Tamil, Kannada,
+   Malayalam, Bengali, English, Spanish, French, German,
+   Japanese, Korean, Arabic, and more.
+
+
+Q: Do I need an internet connection?
+A: Yes. The plugin sends audio to cloud-based STT and AI
+   services for processing. An active internet connection
+   is required during caption generation.
+
+
+Q: Where are my API keys stored?
+A: API keys are stored locally in your browser's localStorage
+   within the Adobe CEP panel. They are NEVER sent to us —
+   only to the respective API providers.
+
+
+Q: How long can my clips be?
+A: There's no hard limit. For clips longer than 25 seconds,
+   the plugin automatically splits the audio into chunks and
+   processes them sequentially.
+
+
+Q: Can I process multiple clips at once?
+A: Yes! Select multiple layers/clips and the plugin will
+   process them in batch mode.
+
+
+Q: What is the SRT export?
+A: SRT (SubRip Text) is a standard subtitle file format 
+   supported by YouTube, Vimeo, social media platforms, 
+   and most video players. You can upload .srt files 
+   directly to these platforms.
+
+
+Q: Can I edit captions after generating?
+A: Yes! The Caption Editor opens after generation, allowing
+   you to edit text, adjust timings, merge/split segments,
+   and find-and-replace words before importing.
+
+
+Q: How do I uninstall the plugin?
+A: Delete the "com.captiongrit.panel" folder from:
+   Windows: %APPDATA%\Adobe\CEP\extensions\
+   Mac: /Library/Application Support/Adobe/CEP/extensions/
+   Then restart Adobe.
+
+
+
+=============================================================
+  TROUBLESHOOTING — INSTALLATION ISSUES
+=============================================================
+
+
+PROBLEM: Plugin doesn't appear in Window → Extensions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  SOLUTIONS:
+  1. Run install.bat as Administrator
+  2. Make sure the folder path is correct:
+     %APPDATA%\Adobe\CEP\extensions\com.captiongrit.panel\
+  3. Check that manifest.xml exists inside the CSXS subfolder
+  4. Verify registry keys are set:
+     HKCU\Software\Adobe\CSXS.11\PlayerDebugMode = "1"
+  5. Fully close ALL Adobe applications and reopen
+  6. Try restarting your computer after running install.bat
+
+
+PROBLEM: install.bat shows errors
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  SOLUTIONS:
+  1. Right-click install.bat → "Run as Administrator"
+  2. Make sure you extracted the ZIP fully (not running from
+     inside the ZIP file)
+  3. Check Windows Defender isn't blocking the script
+  4. Try the manual installation steps in INSTALLATION GUIDE.txt
+
+
+PROBLEM: "Extension could not be loaded" error in Adobe
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  SOLUTIONS:
+  1. Check that ALL files are present in the extension folder:
+     - index.html, main.js, style.css, host.jsx
+     - CSXS/manifest.xml
+     - lib/CSInterface.js
+  2. Make sure the .debug file is present
+  3. Re-run install.bat
+
+
+
+=============================================================
+  TROUBLESHOOTING — GENERATION ISSUES
+=============================================================
+
+
+PROBLEM: "FFmpeg not installed" error
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  SOLUTIONS:
+  1. Open Command Prompt and type: ffmpeg -version
+     If it says "not recognized", FFmpeg isn't in your PATH
+  2. Install FFmpeg:
+     • Via winget:  winget install -e --id Gyan.FFmpeg
+     • Or manually from https://www.gyan.dev/ffmpeg/builds/
+  3. Add FFmpeg's bin folder to your system PATH
+  4. Restart Adobe AFTER installing FFmpeg
+
+
+PROBLEM: "No footage selected" error
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  SOLUTIONS:
+  1. In AE: Select a footage item in Project panel, OR select
+     a layer in the composition Timeline
+  2. In Premiere Pro: Select a clip in the active Sequence
+  3. Click "Read Selected Clip" to load the clip info
+  4. Make sure the clip has an associated file (not a solid/null)
+
+
+PROBLEM: "No speech detected in the audio"
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  SOLUTIONS:
+  1. Make sure the clip actually contains spoken audio
+  2. Check that the audio isn't muted or at very low volume
+  3. Try selecting a different source language
+  4. Try the other STT provider (switch ElevenLabs ↔ Deepgram)
+
+
+PROBLEM: STT gives poor/wrong transcription
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  SOLUTIONS:
+  1. Select the correct source language manually instead of 
+     "Auto Detect"
+  2. Try the other STT provider
+  3. Add common words to Custom Vocabulary (Advanced tab)
+  4. Ensure audio quality is reasonable (reduce background noise)
+
+
+PROBLEM: AI conversion gives wrong script/transliteration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  SOLUTIONS:
+  1. Try a different AI provider (Gemini → Groq → OpenRouter)
+  2. Add important words to Custom Vocabulary
+  3. Enable the Verification Pass for a second accuracy check
+  4. Make sure you selected the correct source language
+
+
+PROBLEM: "Network error" or "Failed to fetch"
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  SOLUTIONS:
+  1. Check your internet connection
+  2. Run install.bat again (it sets network permissions)
+  3. Fully close Adobe and reopen it
+  4. Try restarting your computer
+  5. Check if your firewall/antivirus is blocking Adobe
+
+  NOTE: This error often happens because the CEP panel 
+  needs proper network permissions. Running install.bat 
+  and restarting Adobe usually fixes it.
+
+
+PROBLEM: "Rate limit exceeded" error
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  SOLUTIONS:
+  1. Wait 1-2 minutes and try again
+  2. Switch to a different provider (Settings tab)
+  3. Use "Auto" mode — it will pick another available provider
+  4. Check if your free tier limit is exhausted for the month
+
+
+PROBLEM: Captions have wrong timing
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  SOLUTIONS:
+  1. Use the Caption Editor to manually adjust start/end times
+  2. Make sure the clip's in-point is set correctly
+  3. For clips with silence at the beginning, trim before
+     generating captions
+
+
+PROBLEM: Text layers don't appear in composition
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  SOLUTIONS:
+  1. Check the Timeline panel — layers may be outside the 
+     visible time range
+  2. Scroll down in the layer stack
+  3. Check if layers are hidden (eye icon in Timeline)
+  4. Make sure the composition was active when generating
+
+
+
+=============================================================
+  TROUBLESHOOTING — LICENSE ISSUES
+=============================================================
+
+
+PROBLEM: "License invalid" error
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  SOLUTIONS:
+  1. Double-check your email and license key
+  2. Make sure there are no extra spaces before/after the key
+  3. Check your purchase email for the correct key format
+  4. Contact the seller if the issue persists
+
+
+PROBLEM: "Device limit reached"
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  SOLUTIONS:
+  1. Deactivate the plugin on a device you no longer use:
+     Settings → Deactivate License
+  2. Then activate on your new device
+  3. Contact the seller if you can't deactivate
+
+
+PROBLEM: License keeps asking to re-activate
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  SOLUTIONS:
+  1. Make sure you clicked "Activate" (not just entered keys)
+  2. Check your internet connection during activation
+  3. Don't clear browser/localStorage data in Adobe
+  4. Try restarting Adobe after activation
+
+
+
+=============================================================
+  GETTING HELP
+=============================================================
+
+  If your issue isn't covered above:
+
+  1. Note the exact error message you see
+  2. Note which STT and AI provider you're using
+  3. Note your Adobe version and operating system
+  4. Contact the seller on the marketplace where you 
+     purchased Captiongrit
+
+  Providing this information will help resolve your issue
+  faster.
+
+
+
+=============================================================
+  For support, contact the seller on the marketplace where
+  you purchased Captiongrit.
+=============================================================

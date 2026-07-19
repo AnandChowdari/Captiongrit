@@ -1,0 +1,43 @@
+=============================================================
+          CAPTIONGRIT — CHANGELOG
+=============================================================
+
+
+-------------------------------------------------------------
+  Version 1.0.0 — Initial Release
+-------------------------------------------------------------
+
+  FEATURES:
+  • AI-powered Speech-to-Text with ElevenLabs Scribe 
+    and Deepgram Nova-2
+  • Multi-language caption support: Telugu, Hindi, Tamil,
+    Kannada, Malayalam, Bengali, English + 17 more languages
+  • Native Script output (original language script)
+  • English Phonetic output (Tenglish, Hinglish, etc.)
+  • English translation output
+  • AI processing via Google Gemini, Groq, and OpenRouter
+  • xAI Grok support
+  • Automatic audio extraction via FFmpeg
+  • Smart audio chunking for long clips (25s segments)
+  • Caption Editor with full editing capabilities:
+    - Edit text and timestamps inline
+    - Merge and split captions
+    - Find and replace across all captions
+    - Delete individual words or captions
+  • Text Layer import into After Effects compositions
+  • SRT subtitle file export
+  • Batch processing of multiple clips
+  • Caption translation to English, Telugu, Hindi, Tamil
+  • Custom vocabulary for proper noun accuracy
+  • Verification pass for improved accuracy
+  • Caption styles: Natural Phrase, Full Sentence, Word-by-Word
+  • Point Text and Paragraph Text toggle
+  • Customizable accent color with color picker
+  • License activation with device management
+  • Dark theme UI optimized for Adobe workspace
+  • Compatible with After Effects CC 2019+ and Premiere Pro CC 2019+
+  • One-click Windows installer (install.bat)
+  • Auto FFmpeg installation via winget
+
+
+=============================================================

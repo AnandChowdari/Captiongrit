@@ -1,0 +1,239 @@
+=============================================================
+        CAPTIONGRIT — INSTALLATION GUIDE
+=============================================================
+     Auto Captioning Plugin for Adobe After Effects 
+                   & Premiere Pro
+=============================================================
+
+
+Thank you for purchasing Captiongrit!
+Follow the steps below to install the plugin on your system.
+
+
+
+-------------------------------------------------------------
+  QUICK INSTALL (RECOMMENDED — WINDOWS)
+-------------------------------------------------------------
+
+  1. Extract the downloaded ZIP file to any folder.
+  2. Right-click "install.bat" and select "Run as Administrator".
+  3. The installer will automatically:
+     • Download and install FFmpeg (required for audio processing)
+     • Copy all plugin files to your Adobe extensions folder
+     • Configure Adobe registry keys so the plugin is recognized
+  4. Once the installer finishes, restart Adobe After Effects
+     or Premiere Pro.
+  5. Open the plugin from:  Window → Extensions → Captiongrit
+
+
+  IF "RUN AS ADMINISTRATOR" IS NOT WORKING:
+  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  If right-clicking doesn't show "Run as Administrator" or 
+  the installer fails to run, use Command Prompt instead:
+
+  1. Press Win + S and search for "cmd"
+  2. Right-click "Command Prompt" and select "Run as Administrator"
+  3. In the CMD window, navigate to the folder where you 
+     extracted the ZIP. For example, if you extracted to 
+     your Desktop:
+       cd "C:\Users\YourUsername\Desktop\Captiongrit"
+  4. Then run the installer by typing:
+       install.bat
+  5. The installer will run with full admin permissions.
+     Wait for it to finish, then restart Adobe.
+
+
+
+-------------------------------------------------------------
+  QUICK INSTALL (RECOMMENDED — MAC)
+-------------------------------------------------------------
+
+  1. Extract the downloaded ZIP file to any folder.
+  2. Open the "Terminal" app (search in Spotlight).
+  3. Type the following command (with a space at the end):
+       sh 
+  4. Drag and drop the "install.sh" file into the Terminal window.
+  5. Press Enter. The installer will automatically configure the
+     plugin and copy the necessary files.
+  6. Wait for it to finish, then restart Adobe After Effects
+     or Premiere Pro.
+
+  Note: Running the installer via the Terminal (as shown above)
+  bypasses macOS "damaged file" and "permission denied" errors.
+
+
+
+-------------------------------------------------------------
+  MANUAL INSTALL (IF THE INSTALLER DOESN'T WORK)
+-------------------------------------------------------------
+
+If the automatic installer fails, follow these steps manually:
+
+
+STEP 1 — Copy the Plugin Folder
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  Copy the entire "com.captiongrit.panel" folder 
+  (this folder itself) to:
+
+  WINDOWS:
+    C:\Users\<YourUsername>\AppData\Roaming\Adobe\CEP\extensions\
+
+  OR (alternate path):
+    C:\Program Files (x86)\Common Files\Adobe\CEP\extensions\
+
+  MAC:
+    /Library/Application Support/Adobe/CEP/extensions/
+
+  The final path should look like:
+    ...\extensions\com.captiongrit.panel\index.html
+    ...\extensions\com.captiongrit.panel\main.js
+    ...\extensions\com.captiongrit.panel\style.css
+    ...\extensions\com.captiongrit.panel\host.jsx
+    ...\extensions\com.captiongrit.panel\CSXS\manifest.xml
+    ...\extensions\com.captiongrit.panel\lib\CSInterface.js
+
+
+STEP 2 — Enable Unsigned CEP Extensions
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  Adobe requires extensions to be signed. For this plugin to
+  load, you need to enable debug/developer mode:
+
+  WINDOWS:
+    1. Press Win + R, type "regedit", and press Enter.
+    2. Navigate to: HKEY_CURRENT_USER\Software\Adobe\
+    3. Create the following keys (if they don't exist) and add
+       a String Value named "PlayerDebugMode" with value "1":
+
+       HKEY_CURRENT_USER\Software\Adobe\CSXS.9
+       HKEY_CURRENT_USER\Software\Adobe\CSXS.10
+       HKEY_CURRENT_USER\Software\Adobe\CSXS.11
+
+  MAC:
+    Open Terminal and run:
+      defaults write com.adobe.CSXS.9 PlayerDebugMode 1
+      defaults write com.adobe.CSXS.10 PlayerDebugMode 1
+      defaults write com.adobe.CSXS.11 PlayerDebugMode 1
+
+  NOTE: The install.bat does this automatically for Windows.
+
+
+STEP 3 — Install FFmpeg
+~~~~~~~~~~~~~~~~~~~~~~~~~
+  FFmpeg is required to extract audio from video files.
+
+  1. Download FFmpeg from:  https://www.gyan.dev/ffmpeg/builds/
+     (Download the "ffmpeg-release-essentials" build)
+  2. Extract the ZIP to a folder, e.g., C:\ffmpeg
+  3. Add the "bin" folder to your System PATH:
+     - Search "Environment Variables" in Windows Settings
+     - Under "System Variables", find "Path", click Edit
+     - Add:  C:\ffmpeg\bin
+     - Click OK and restart your terminal
+  4. Verify installation by opening a Command Prompt and typing:
+       ffmpeg -version
+     You should see version information.
+
+  ALTERNATIVE (Windows 10/11 with winget):
+    Open PowerShell and run:
+      winget install -e --id Gyan.FFmpeg
+
+
+STEP 4 — Launch the Plugin
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  1. Fully close and reopen Adobe After Effects or Premiere Pro.
+  2. Go to:  Window → Extensions → Captiongrit
+  3. The Captiongrit panel will open on the right side.
+  4. Activate with your license key (see LICENSE & ACTIVATION.txt).
+  5. Set up your API keys (see HOW TO GET API KEYS.txt).
+  6. You're ready to go!
+
+
+
+-------------------------------------------------------------
+  SYSTEM REQUIREMENTS
+-------------------------------------------------------------
+
+  • Adobe After Effects CC 2019 (v16.0) or later
+  • Adobe Premiere Pro CC 2019 (v13.0) or later
+  • Windows 10/11 or macOS 10.14+
+  • FFmpeg installed and added to system PATH
+  • Internet connection (required for API calls)
+  • At least one Speech-to-Text (STT) API key
+  • At least one AI provider API key
+
+
+
+-------------------------------------------------------------
+  TROUBLESHOOTING
+-------------------------------------------------------------
+
+  PROBLEM: Plugin doesn't appear in Window → Extensions
+  FIX:    
+    • Make sure the folder is in the correct path (see Step 1)
+    • Ensure "PlayerDebugMode" registry keys are set (see Step 2)
+    • Fully restart Adobe (close ALL Adobe apps, then reopen)
+    • Run install.bat as Administrator
+    • On Mac, ensure you ran "install.sh" using Terminal
+
+  PROBLEM: Mac says the installer is "damaged" or gives "permission denied"
+  FIX:
+    • This happens when you try to double-click the file.
+    • Instead, follow the "QUICK INSTALL (RECOMMENDED — MAC)" section
+      above to run the installer using the `sh` command in Terminal.
+
+  PROBLEM: "FFmpeg not installed" error
+  FIX:    
+    • This almost always means FFmpeg is not added to your 
+      system PATH. Even if FFmpeg is downloaded, Windows won't
+      find it unless the PATH is set correctly.
+
+    HOW TO ADD FFMPEG TO PATH (STEP-BY-STEP):
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    1. Find where FFmpeg is installed. If you used winget, it's
+       usually at:  C:\Users\<YourUsername>\AppData\Local\Microsoft\WinGet\Packages\
+       If you downloaded manually, it's wherever you extracted it
+       (e.g., C:\ffmpeg)
+
+    2. Inside the FFmpeg folder, find the "bin" subfolder.
+       It should contain: ffmpeg.exe, ffplay.exe, ffprobe.exe
+       Copy the full path to this bin folder. For example:
+         C:\ffmpeg\bin
+       OR
+         C:\Users\YourName\AppData\Local\Microsoft\WinGet\Packages\Gyan.FFmpeg_...\ffmpeg-7.1-essentials_build\bin
+
+    3. Press Win + S and search for "Environment Variables"
+    4. Click "Edit the system environment variables"
+    5. In the window that opens, click "Environment Variables..."
+       button at the bottom
+    6. Under "System variables" (bottom section), find the 
+       variable named "Path" and select it
+    7. Click "Edit..."
+    8. Click "New" and paste the full path to the FFmpeg bin 
+       folder (from step 2)
+    9. Click "OK" on all windows to save
+
+    10. IMPORTANT: Close ALL open Command Prompt / PowerShell 
+        windows and open a NEW one
+    11. Type:  ffmpeg -version
+        If you see version info, it's working!
+    12. Restart Adobe After Effects / Premiere Pro
+
+    STILL NOT WORKING?
+    • Make sure you copied the path to the "bin" folder, 
+      NOT the parent ffmpeg folder
+    • Try restarting your computer after setting the PATH
+    • Try reinstalling FFmpeg with winget:
+        winget install -e --id Gyan.FFmpeg
+
+  PROBLEM: Network / API errors
+  FIX:    
+    • Make sure you have an active internet connection
+    • Verify your API keys are correct in the Settings tab
+    • Try running install.bat again and restart Adobe
+
+
+
+=============================================================
+  For support, contact the seller on the marketplace where
+  you purchased Captiongrit.
+=============================================================

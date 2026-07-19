@@ -1,0 +1,297 @@
+=============================================================
+           CAPTIONGRIT — HOW TO USE
+=============================================================
+     Auto Captioning Plugin for Adobe After Effects 
+                   & Premiere Pro
+=============================================================
+
+
+This guide walks you through how to use Captiongrit
+to auto-generate captions for your video clips using 
+AI-powered speech-to-text.
+
+
+
+=============================================================
+  QUICK START (5 STEPS)
+=============================================================
+
+  1. Select a clip in your timeline or project panel
+  2. Click "Read Selected Clip" in the plugin
+  3. Choose your language and caption settings
+  4. Click "Generate Captions"
+  5. Review, edit, and import your captions!
+
+
+
+=============================================================
+  DETAILED WALKTHROUGH
+=============================================================
+
+
+-------------------------------------------------------------
+  STEP 1: ACTIVATE YOUR LICENSE
+-------------------------------------------------------------
+
+  When you open the plugin for the first time, you'll see
+  the activation screen.
+
+  1. Enter your Email Address (the one used for purchase)
+  2. Enter your License Key (format: CAP-XXXX-XXXX-XXXX)
+  3. Click "Activate License"
+  4. The main panel will appear after successful activation
+
+  NOTE: Your license allows activation on a limited number 
+  of devices. If you need to move to a new computer, 
+  deactivate on the old one first (Settings → Deactivate).
+
+
+
+-------------------------------------------------------------
+  STEP 2: SET UP API KEYS (ONE-TIME)
+-------------------------------------------------------------
+
+  Go to the "Settings" tab and enter your API keys.
+  (See "HOW TO GET API KEYS.txt" for detailed instructions)
+
+  You need at minimum:
+    • 1 Speech-to-Text (STT) key — ElevenLabs or Deepgram
+    • 1 AI provider key — Gemini, Groq, or OpenRouter
+
+  Click "Save Keys" after entering them. Keys are stored
+  locally and persist across sessions.
+
+
+
+-------------------------------------------------------------
+  STEP 3: SELECT YOUR CLIP
+-------------------------------------------------------------
+
+  IN AFTER EFFECTS:
+    • Select a footage item in the Project Panel, OR
+    • Select a layer in the active Composition Timeline
+
+  IN PREMIERE PRO:
+    • Select a clip in your active Sequence Timeline
+
+  Then click the "Click to Read Selected Clip" button in
+  the plugin. You'll see the clip name, duration, and 
+  frame rate appear.
+
+  BATCH PROCESSING:
+    You can select multiple clips/layers at once. The plugin
+    will process them sequentially and combine the results.
+
+
+
+-------------------------------------------------------------
+  STEP 4: CONFIGURE SETTINGS
+-------------------------------------------------------------
+
+  A) STT Provider
+  ~~~~~~~~~~~~~~~~
+    • ElevenLabs Scribe (Recommended) — Excellent accuracy 
+      for Indian languages
+    • Deepgram Nova-2 — Good alternative with $200 free credits
+
+  B) Source Language
+  ~~~~~~~~~~~~~~~~~~
+    • Auto Detect — Let the AI detect the spoken language
+    • Telugu, Hindi, Tamil, Kannada, Malayalam, English — 
+      Select manually for better accuracy
+
+    IMPORTANT: If you choose "Native Script" or "English 
+    Phonetic" as your caption language, you MUST select a 
+    specific source language. Auto Detect won't work for these.
+
+  C) Caption Language (Output Format)
+  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    You can select ONE or MORE of:
+
+    • Native Script — Captions in the original script
+      (e.g., తెలుగు, हिंदी, தமிழ்)
+    • English Phonetic — Romanized/phonetic version
+      (e.g., "Nenu eeroju biryani chestunnanu" for Telugu)
+    • English — Translated to English
+
+  D) Translate Captions (Optional)
+  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    Toggle ON to translate your captions to another language.
+    Available targets: English, Telugu, Hindi, Tamil
+
+  E) AI Provider
+  ~~~~~~~~~~~~~~~~
+    • Auto — Automatically tries all available providers
+      (uses whichever key is available)
+    • Google Gemini — Fast and accurate (Recommended)
+    • Groq — Very fast inference
+    • OpenRouter — Access to multiple free models
+
+  F) Caption Style
+  ~~~~~~~~~~~~~~~~~
+    • Natural Phrase — Groups 6–8 words per caption
+      (most natural reading flow)
+    • Full Sentence — One complete sentence per caption
+    • Word-by-Word — Individual word captions with
+      precise timing
+
+  G) Output Options
+  ~~~~~~~~~~~~~~~~~~
+    Select one or both:
+
+    • Text Layers in AE/PP — Creates styled text layers
+      directly in your composition/sequence
+    • SRT File Export — Exports a standard .srt subtitle
+      file to your project folder
+
+
+
+-------------------------------------------------------------
+  STEP 5: GENERATE CAPTIONS
+-------------------------------------------------------------
+
+  Click "Generate Captions" and the plugin will:
+
+  1. Extract audio from your clip using FFmpeg
+  2. Send the audio to the STT provider for transcription
+  3. Use AI to convert the text to your chosen format(s)
+  4. Optionally translate the captions
+  5. Open the Caption Editor for review
+
+  You'll see a progress bar and live preview of the first
+  few captions as they're generated.
+
+
+
+-------------------------------------------------------------
+  STEP 6: REVIEW & EDIT (CAPTION EDITOR)
+-------------------------------------------------------------
+
+  After generation, the Caption Editor opens showing:
+    • Index number
+    • Start time
+    • End time  
+    • Caption text
+
+  You can:
+    • Click any cell to EDIT the text, start, or end time
+    • MERGE two adjacent captions into one
+    • SPLIT a caption into two parts
+    • DELETE individual captions
+    • REPLACE a word across all captions at once
+    • DELETE a word from all captions at once
+
+  When satisfied, click "Import to Timeline" to create the
+  text layers, or "Export SRT" to save the subtitle file.
+
+
+
+=============================================================
+  ADVANCED FEATURES
+=============================================================
+
+
+-------------------------------------------------------------
+  CUSTOM VOCABULARY
+-------------------------------------------------------------
+
+  In the "Advanced" tab, you can add custom words/names
+  that the AI should spell correctly.
+
+  Examples:
+    • Brand names: "Captiongrit", "ChatGPT", "YouTube"
+    • Personal names: "Yuvaraj", "Priyanka"
+    • Technical terms: "FFmpeg", "codec"
+
+  Enter words separated by commas. The AI will use these
+  as reference when generating captions.
+
+
+
+-------------------------------------------------------------
+  VERIFICATION PASS
+-------------------------------------------------------------
+
+  Enable the "Verify Captions" toggle to run a second AI
+  pass that checks and corrects the generated captions for:
+    • Spelling accuracy
+    • Proper script rendering
+    • Consistent transliteration
+
+  This takes slightly longer but improves accuracy.
+
+
+
+-------------------------------------------------------------
+  ACCENT COLOR CUSTOMIZATION
+-------------------------------------------------------------
+
+  In Settings, use the color picker to change the plugin's
+  accent color to match your workflow or brand.
+  Click "Reset" to return to the default green accent.
+
+
+
+-------------------------------------------------------------
+  POINT TEXT vs PARAGRAPH TEXT
+-------------------------------------------------------------
+
+  Toggle between:
+    • Point Text — Single-line text (good for subtitles)
+    • Paragraph Text — Text box with wrapping (good for 
+      longer captions in a defined area)
+
+
+
+=============================================================
+  SUPPORTED LANGUAGES
+=============================================================
+
+  ┌─────────────────┬───────────────────────────────────────┐
+  │  Language       │  Supported Formats                    │
+  ├─────────────────┼───────────────────────────────────────┤
+  │  Telugu         │  తెలుగు Script, Tenglish, English     │
+  │  Hindi          │  हिंदी Script, Hinglish, English       │
+  │  Tamil          │  தமிழ் Script, English                 │
+  │  Kannada        │  ಕನ್ನಡ Script, English                 │
+  │  Malayalam      │  മലയാളം Script, English                │
+  │  Bengali        │  বাংলা Script, English                  │
+  │  Marathi        │  मराठी Script, English                  │
+  │  Gujarati       │  ગુજરાતી Script, English               │
+  │  Punjabi        │  ਪੰਜਾਬੀ Script, English                │
+  │  Urdu           │  اردو Script, English                  │
+  │  English        │  English                              │
+  │  Spanish        │  Script, English                      │
+  │  French         │  Script, English                      │
+  │  German         │  Script, English                      │
+  │  Japanese       │  日本語 Script, English                 │
+  │  Korean         │  한국어 Script, English                 │
+  │  Arabic         │  العربية Script, English               │
+  │  And more...    │  24 languages total                   │
+  └─────────────────┴───────────────────────────────────────┘
+
+
+
+=============================================================
+  TIPS FOR BEST RESULTS
+=============================================================
+
+  1. Use clear audio — Minimize background noise for better
+     transcription accuracy
+  2. Select the correct source language — Manual selection
+     is more accurate than Auto Detect
+  3. Use custom vocabulary — Add brand names, technical terms,
+     and proper nouns for perfect spelling
+  4. Try different STT providers — If one gives poor results,
+     try the other
+  5. Enable verification — For important projects, turn on
+     the verification pass
+  6. Review before importing — Always check the Caption Editor
+     before importing to your timeline
+
+
+
+=============================================================
+  For support, contact the seller on the marketplace where
+  you purchased Captiongrit.
+=============================================================

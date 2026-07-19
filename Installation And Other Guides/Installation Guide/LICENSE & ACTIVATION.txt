@@ -1,0 +1,122 @@
+=============================================================
+       CAPTIONGRIT — LICENSE & ACTIVATION
+=============================================================
+
+
+-------------------------------------------------------------
+  ACTIVATING YOUR LICENSE
+-------------------------------------------------------------
+
+  When you first open Captiongrit, you'll see the 
+  activation screen. Enter the following to unlock the plugin:
+
+  1. EMAIL ADDRESS
+     The email address you used when purchasing the plugin.
+
+  2. LICENSE KEY
+     The license key you received after purchase.
+     Format: CAP-XXXX-XXXX-XXXX
+
+  3. Click "Activate License"
+
+  If activation is successful, the main Captiongrit
+  panel will appear and you can start generating captions.
+
+
+
+-------------------------------------------------------------
+  WHERE TO FIND YOUR LICENSE KEY
+-------------------------------------------------------------
+
+  Your license key was sent to you via:
+    • The purchase confirmation email from the marketplace
+    • The download page after completing your purchase
+
+  If you cannot find your license key, contact the seller
+  on the marketplace where you purchased Captiongrit.
+
+
+
+-------------------------------------------------------------
+  DEVICE LIMITS
+-------------------------------------------------------------
+
+  Your license allows activation on a limited number of 
+  devices (typically 2 devices per license).
+
+  If you reach the device limit:
+    • Deactivate the plugin on a device you no longer use
+      (Settings → Deactivate License)
+    • Then activate on your new device
+
+  If you're locked out, contact the seller for assistance.
+
+
+
+-------------------------------------------------------------
+  DEACTIVATING YOUR LICENSE
+-------------------------------------------------------------
+
+  To deactivate Captiongrit on a device:
+
+  1. Open Captiongrit in After Effects or Premiere Pro
+  2. Go to the "Settings" tab
+  3. Scroll down to "License Information"
+  4. Click "Deactivate License"
+  5. The plugin will return to the activation screen
+
+  This frees up a device slot so you can activate on 
+  another computer.
+
+
+
+-------------------------------------------------------------
+  LICENSE TERMS
+-------------------------------------------------------------
+
+  1. PERSONAL & COMMERCIAL USE
+     You may use Captiongrit for both personal and
+     commercial video projects.
+
+  2. SINGLE USER
+     Each license is for a single user. Do not share your
+     license key with others.
+
+  3. NO REDISTRIBUTION
+     You may not redistribute, resell, or share the plugin
+     files or source code.
+
+  4. NO REVERSE ENGINEERING
+     You may not decompile, reverse-engineer, or modify
+     the plugin code.
+
+  5. UPDATES
+     Minor updates and bug fixes are included with your
+     purchase. Major version upgrades may require a 
+     separate purchase.
+
+  6. REFUNDS
+     Refund policies are governed by the marketplace where
+     you purchased the plugin.
+
+  7. THIRD-PARTY SERVICES
+     This plugin uses third-party APIs (ElevenLabs, Deepgram,
+     Google Gemini, Groq, OpenRouter). You are responsible
+     for your own API key usage and any costs incurred 
+     beyond free tier limits.
+
+  8. AS-IS WARRANTY
+     This plugin is provided "as-is" without warranty of
+     any kind. The developer is not liable for any damages
+     arising from its use.
+
+  9. ADOBE COMPONENTS
+     CSInterface.js is © Adobe Systems Incorporated and 
+     is used under Adobe's CEP SDK license terms.
+
+
+
+=============================================================
+  For support, contact the seller on the marketplace where
+  you purchased Captiongrit.
+=============================================================

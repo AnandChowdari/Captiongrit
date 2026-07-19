@@ -1,0 +1,249 @@
+=============================================================
+       CAPTIONGRIT — HOW TO GET API KEYS
+=============================================================
+     All providers offer FREE tiers — no payment required!
+=============================================================
+
+
+Captiongrit uses external AI services for two things:
+
+  1. SPEECH-TO-TEXT (STT) — Converts your video audio into
+     text with word-level timestamps.
+     → You need at least ONE STT key (ElevenLabs or Deepgram)
+
+  2. AI PROCESSING — Converts, transliterates, and translates
+     the transcribed text.
+     → You need at least ONE AI key (Gemini, Groq, or OpenRouter)
+
+All services below have generous FREE tiers. You do NOT need
+to pay anything to get started.
+
+
+
+=============================================================
+  SPEECH-TO-TEXT (STT) PROVIDERS
+=============================================================
+
+
+-------------------------------------------------------------
+  1. ELEVENLABS  ★ RECOMMENDED
+-------------------------------------------------------------
+  Free Tier: 10,000 characters per month
+  Best For:  Indian languages (Telugu, Hindi, Tamil, etc.)
+  Website:   https://elevenlabs.io
+
+  HOW TO GET YOUR KEY:
+
+  1. Go to https://elevenlabs.io
+  2. Click "Sign Up" (top right) — you can use Google/GitHub
+  3. After signing in, click your profile icon (top right)
+  4. Click "Profile + API key" from the dropdown menu
+  5. You'll see your API key — click the copy icon to copy it
+  6. Paste it into Captiongrit → Settings → ElevenLabs
+
+  NOTES:
+  • Free tier resets every month
+  • 10,000 characters ≈ about 10-15 minutes of video
+  • If you need more, paid plans start at $5/month
+
+
+
+-------------------------------------------------------------
+  2. DEEPGRAM
+-------------------------------------------------------------
+  Free Tier: $200 in free credits (one-time)
+  Best For:  English and general-purpose transcription
+  Website:   https://console.deepgram.com
+
+  HOW TO GET YOUR KEY:
+
+  1. Go to https://console.deepgram.com
+  2. Click "Sign Up" — you can use Google/GitHub/Email
+  3. After signing in, go to "API Keys" in the left sidebar
+  4. Click "Create a New API Key"
+  5. Give it a name (e.g., "Captiongrit")
+  6. Set permissions to "Member" (default is fine)
+  7. Click "Create Key"
+  8. IMPORTANT: Copy the key immediately — it won't be shown 
+     again after you leave the page!
+  9. Paste it into Captiongrit → Settings → Deepgram
+
+  NOTES:
+  • $200 free credits last a very long time for captioning
+  • No credit card required for the free tier
+  • Supports 30+ languages
+
+
+
+=============================================================
+  AI PROCESSING PROVIDERS
+=============================================================
+
+
+-------------------------------------------------------------
+  3. GOOGLE GEMINI  ★ RECOMMENDED
+-------------------------------------------------------------
+  Free Tier: Free tier with generous rate limits
+  Best For:  Best overall quality for transliteration
+  Website:   https://aistudio.google.com
+
+  HOW TO GET YOUR KEY:
+
+  1. Go to https://aistudio.google.com
+  2. Sign in with your Google account
+  3. Click "Get API Key" in the left sidebar
+  4. Click "Create API Key"
+  5. Select a Google Cloud project (or create a new one — 
+     it's free, no billing required)
+  6. Your API key will be generated — copy it
+  7. Paste it into Captiongrit → Settings → Google Gemini
+
+  NOTES:
+  • 15 requests per minute on free tier (more than enough)
+  • No credit card required
+  • Excellent quality for Indian language transliteration
+
+
+
+-------------------------------------------------------------
+  4. GROQ
+-------------------------------------------------------------
+  Free Tier: Free (very generous rate limits)
+  Best For:  Fastest inference speed
+  Website:   https://console.groq.com
+
+  HOW TO GET YOUR KEY:
+
+  1. Go to https://console.groq.com
+  2. Click "Sign Up" or "Login" — you can use Google/GitHub
+  3. After signing in, click "API Keys" in the left sidebar
+  4. Click "Create API Key"
+  5. Give it a name (e.g., "Captiongrit")
+  6. Copy the API key shown
+  7. Paste it into Captiongrit → Settings → Groq
+
+  NOTES:
+  • Completely free (no credit card needed)
+  • Uses Llama and other open-source models
+  • Very fast processing speed
+  • Rate limits: 14,400 requests/day on free tier
+
+
+
+-------------------------------------------------------------
+  5. OPENROUTER
+-------------------------------------------------------------
+  Free Tier: Free models available (no cost)
+  Best For:  Access to many different AI models
+  Website:   https://openrouter.ai
+
+  HOW TO GET YOUR KEY:
+
+  1. Go to https://openrouter.ai
+  2. Click "Sign In" — use Google/GitHub/Email
+  3. After signing in, click your profile (top right)
+  4. Go to "Keys" from the menu
+  5. Click "Create Key"
+  6. Name it (e.g., "Captiongrit")
+  7. Copy the API key
+  8. Paste it into Captiongrit → Settings → OpenRouter
+
+  NOTES:
+  • Many models are completely free (marked as "Free" on site)
+  • Captiongrit automatically uses free models
+  • No credit card required for free models
+
+
+
+-------------------------------------------------------------
+  6. xAI GROK (OPTIONAL)
+-------------------------------------------------------------
+  Free Tier: $25 in free credits per month
+  Best For:  Alternative AI processing
+  Website:   https://console.x.ai
+
+  HOW TO GET YOUR KEY:
+
+  1. Go to https://console.x.ai
+  2. Sign up or log in with your X (Twitter) account
+  3. Navigate to "API Keys" section
+  4. Click "Create New Key"
+  5. Copy the API key
+  6. Paste it into Captiongrit → Settings → xAI Grok
+
+  NOTES:
+  • $25 free credits refresh monthly
+  • Good alternative if other providers are rate-limited
+
+
+
+=============================================================
+  QUICK REFERENCE — RECOMMENDED SETUP
+=============================================================
+
+  For the best free experience, we recommend:
+
+  ┌─────────────────────────────────────────────────────────┐
+  │                                                         │
+  │   STT Provider:  ElevenLabs (best for Indian languages) │
+  │   AI Provider:   Google Gemini (best quality, free)     │
+  │                                                         │
+  │   Total Cost:    $0 (both have free tiers)              │
+  │                                                         │
+  └─────────────────────────────────────────────────────────┘
+
+  TIP: Set up keys for ALL providers you can. When you select
+  "Auto" as the AI provider, Captiongrit will 
+  automatically pick the best available provider, and fall 
+  back to alternatives if one is rate-limited.
+
+
+
+=============================================================
+  ENTERING KEYS IN THE PLUGIN
+=============================================================
+
+  1. Open Captiongrit in After Effects or Premiere Pro
+  2. Click the "Settings" tab at the top of the panel
+  3. Paste each API key into the corresponding input field
+  4. Click "Save Keys"
+  5. You'll see a "Keys saved" confirmation
+  6. Switch back to the "Generate" tab — you're ready!
+
+  Your keys are stored locally on your computer and are 
+  NEVER sent to us. They are only used to communicate 
+  directly with the API providers.
+
+
+
+=============================================================
+  TROUBLESHOOTING API KEY ISSUES
+=============================================================
+
+  PROBLEM: "No API key" error
+  FIX:    Go to Settings tab, paste your key, click Save Keys
+
+  PROBLEM: "Invalid API key" or "401 Unauthorized"
+  FIX:    
+    • Double-check you copied the full key without spaces
+    • Make sure there are no extra characters before/after
+    • Try generating a new key from the provider's website
+
+  PROBLEM: "Rate limit exceeded"
+  FIX:    
+    • Wait a few minutes and try again
+    • Switch to a different provider (e.g., Groq → Gemini)
+    • Use "Auto" mode to let the plugin pick automatically
+
+  PROBLEM: "Network error" or "Failed to fetch"
+  FIX:    
+    • Check your internet connection
+    • Run install.bat again and restart Adobe
+    • Try a different API provider
+
+
+
+=============================================================
+  For support, contact the seller on the marketplace where
+  you purchased Captiongrit.
+=============================================================
