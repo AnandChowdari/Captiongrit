@@ -1096,7 +1096,7 @@ html, body {
 
 /* ---------- License Authentication Screen ---------- */
 .auth-screen {
-    position: absolute;
+    position: fixed;
     inset: 0;
     background: var(--bg-panel);
     z-index: 9999;
