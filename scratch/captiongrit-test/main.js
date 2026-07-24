@@ -4078,8 +4078,8 @@
         var key = getApiKey("gemini");
         if (!key) throw new Error("Gemini API key not set.");
 
-        // Try models in order: 2.5-flash -> 2.5-flash-lite
-        var models = ["gemini-2.5-flash", "gemini-2.5-flash-lite"];
+        // Try models in order: 3.5-flash -> 3.1-flash-lite
+        var models = ["gemini-3.5-flash", "gemini-3.1-flash-lite"];
         var errors = [];
 
         for (var m = 0; m < models.length; m++) {

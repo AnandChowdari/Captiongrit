@@ -7,7 +7,12 @@
     "use strict";
 
     // ------------------------------------------
-    // Plan Tier System (value injected by build script)
+    // Plan Tier System Descriptions
+    // ------------------------------------------
+    // Basic:   maxDuration: 30s, maxDevices: 1, maxClips: 1, Full Sentence only
+    // Pro:     maxDuration: 150s, maxDevices: 1, maxClips: 1, Word By Word, Editor, Double Check, Custom Dict, English Output
+    // Extreme: maxDuration: unlimited, maxDevices: 3, maxClips: 99, all Pro features + Batch Processing
+    // Beta:    Same as Extreme (Internal testing tier)
     // ------------------------------------------
 
     // ------------------------------------------
@@ -258,11 +263,7 @@
         // Set plan badge in header
         var badge = document.getElementById("plan-badge");
         if (badge) {
-            if (getPlanId() === "beta") {
-                badge.style.display = "inline-block";
-            } else {
-                badge.style.display = "none";
-            }
+            badge.style.display = "inline-block";
             if (getPlanId()) {
                 badge.textContent = PLAN_LABELS[getPlanId()] || "Basic";
                 badge.className = "plan-badge plan-" + getPlanId();
@@ -4078,8 +4079,8 @@
         var key = getApiKey("gemini");
         if (!key) throw new Error("Gemini API key not set.");
 
-        // Try models in order: 2.5-flash -> 2.5-flash-lite
-        var models = ["gemini-2.5-flash", "gemini-2.5-flash-lite"];
+        // Try models in order: 3.5-flash -> 3.1-flash-lite
+        var models = ["gemini-3.5-flash", "gemini-3.1-flash-lite"];
         var errors = [];
 
         for (var m = 0; m < models.length; m++) {
@@ -4625,6 +4626,7 @@
             var errorMsg = document.getElementById("errorMsg");
             if (errorMsg) errorMsg.className = "status-msg";
         }
+        window.scrollTo(0, 0);
     }
 
     function showError(message) {
