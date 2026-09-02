@@ -9,6 +9,8 @@ customization, and efficient usage of the plugin.
 -------------------------------------------------------------
 1. INSTALLATION
 -------------------------------------------------------------
+📺 Watch the Installation Video: https://youtu.be/JMMGoALepR0
+
 The plugin includes an automated, one-click installer that sets up the plugin and FFmpeg automatically without requiring Administrator or Root passwords!
 
 **WINDOWS INSTALLATION:**
@@ -37,6 +39,8 @@ Because this installer was downloaded from the internet, macOS will block it by 
 -------------------------------------------------------------
 2. SETTING UP API KEYS (FREE)
 -------------------------------------------------------------
+📺 Watch the API Setup Video: https://youtu.be/bnJ-pPlMwEg
+
 The plugin supports multiple API providers for Speech-to-Text (STT)
 and AI processing. They all offer generous FREE tiers.
 

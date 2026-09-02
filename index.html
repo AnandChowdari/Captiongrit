@@ -4,22 +4,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=320, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src *; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
+    <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src *; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
     <title>Captiongrit</title>
-    <link rel="stylesheet" href="style.css?v=1.0.0">
+    <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
     <div id="panel-container">
-        
+
         <!-- ═══════════ LOADING SCREEN ═══════════ -->
         <div id="loading-screen" class="auth-screen" style="z-index: 9999; display: flex;">
             <div class="auth-header">
                 <div class="auth-logo-wrap">
                     <div class="logo-icon logo-icon-lg" style="background:transparent; border:none; box-shadow:none;">
                         <svg viewBox="0 0 1280 1280" class="logo-svg-animated" xmlns="http://www.w3.org/2000/svg">
-                            <path class="logo-shape-right" fill="var(--accent)" d="M726.79,765.37v-180.09c0-16.57-13.43-30-30-30h-133.66c-20.04,0-36.29-16.25-36.29-36.29v-134.27h268.02c29.09,0,52.68,23.58,52.68,52.68v459.69c0,29.09-23.58,52.68-52.68,52.68h-273.34v-118.1c0-20.04,16.25-36.29,36.29-36.29h138.99c16.57,0,30-13.43,30-30Z"/>
-                            <path class="logo-shape-left" fill="var(--accent)" d="M507.94,828.38c0-27.88,22.6-50.49,50.49-50.49h122.51c16.59,0,30.05-13.43,30.05-30v-147.84c0-16.57-13.45-30-30.05-30h-118.34c-27.1,0-49.07-21.97-49.07-49.07v-136.26h-5.59c-112.37,0-203.47,91.1-203.47,203.47v158.1c0,112.37,91.1,203.47,203.47,203.47h0v-121.38Z"/>
+                            <path class="logo-shape-left" fill="var(--accent)"
+                                d="M640,572.81v147.84c0,16.57-13.45,30-30.05,30h-122.51c-27.88,0-50.49,22.61-50.49,50.49v121.38c-112.37,0-203.47-91.1-203.47-203.47v-158.1c0-112.3,90.99-203.36,203.26-203.47h201.36v172.69h-179.36c8.71,7.86,21.21,20.83,33.86,20.83h118.33c16.6,0,29.07,5.24,29.07,21.81Z" />
+                            <path class="logo-shape-right" fill="var(--accent)"
+                                d="M882.67,396.1v486.09c0,20.67-16.76,37.43-37.43,37.43h-390v-119.61c0-18.84,15.35-34.11,34.28-34.11h126.86c18.3,0,39.24-14.76,39.24-32.97v-375.44h188.43c21.33,0,38.62,17.29,38.62,38.62Z" />
                         </svg>
                     </div>
                 </div>
@@ -34,15 +37,17 @@
                 <div class="auth-logo-wrap">
                     <div class="logo-icon logo-icon-lg" style="background:transparent; border:none; box-shadow:none;">
                         <svg viewBox="0 0 1280 1280" class="logo-svg-animated" xmlns="http://www.w3.org/2000/svg">
-                            <path class="logo-shape-right" fill="var(--accent)" d="M726.79,765.37v-180.09c0-16.57-13.43-30-30-30h-133.66c-20.04,0-36.29-16.25-36.29-36.29v-134.27h268.02c29.09,0,52.68,23.58,52.68,52.68v459.69c0,29.09-23.58,52.68-52.68,52.68h-273.34v-118.1c0-20.04,16.25-36.29,36.29-36.29h138.99c16.57,0,30-13.43,30-30Z"/>
-                            <path class="logo-shape-left" fill="var(--accent)" d="M507.94,828.38c0-27.88,22.6-50.49,50.49-50.49h122.51c16.59,0,30.05-13.43,30.05-30v-147.84c0-16.57-13.45-30-30.05-30h-118.34c-27.1,0-49.07-21.97-49.07-49.07v-136.26h-5.59c-112.37,0-203.47,91.1-203.47,203.47v158.1c0,112.37,91.1,203.47,203.47,203.47h0v-121.38Z"/>
+                            <path class="logo-shape-left" fill="var(--accent)"
+                                d="M640,572.81v147.84c0,16.57-13.45,30-30.05,30h-122.51c-27.88,0-50.49,22.61-50.49,50.49v121.38c-112.37,0-203.47-91.1-203.47-203.47v-158.1c0-112.3,90.99-203.36,203.26-203.47h201.36v172.69h-179.36c8.71,7.86,21.21,20.83,33.86,20.83h118.33c16.6,0,29.07,5.24,29.07,21.81Z" />
+                            <path class="logo-shape-right" fill="var(--accent)"
+                                d="M882.67,396.1v486.09c0,20.67-16.76,37.43-37.43,37.43h-390v-119.61c0-18.84,15.35-34.11,34.28-34.11h126.86c18.3,0,39.24-14.76,39.24-32.97v-375.44h188.43c21.33,0,38.62,17.29,38.62,38.62Z" />
                         </svg>
                     </div>
                 </div>
                 <h2>Captiongrit</h2>
                 <p>Enter your credentials to unlock the plugin.</p>
             </div>
-            
+
             <div class="status-msg" id="errorMsg"></div>
 
             <div class="auth-field">
@@ -56,8 +61,9 @@
             </div>
 
             <button class="btn btn-primary" id="activateBtn">Activate License</button>
-            <button class="btn btn-primary" id="buyBtn" style="display:none; margin-top:8px; background:var(--accent); color:#111;">🚀 Buy Full Version</button>
-            
+            <button class="btn btn-primary" id="buyBtn"
+                style="display:none; margin-top:8px; background:var(--accent); color:#111;">🚀 Buy Full Version</button>
+
             <div class="auth-footer">
                 Need a license key? Contact your administrator.
             </div>
@@ -68,15 +74,19 @@
             <div class="logo">
                 <div class="logo-icon" style="background:transparent; border:none; box-shadow:none;">
                     <svg viewBox="0 0 1280 1280" class="logo-svg-animated" xmlns="http://www.w3.org/2000/svg">
-                        <path class="logo-shape-right" fill="var(--accent)" d="M726.79,765.37v-180.09c0-16.57-13.43-30-30-30h-133.66c-20.04,0-36.29-16.25-36.29-36.29v-134.27h268.02c29.09,0,52.68,23.58,52.68,52.68v459.69c0,29.09-23.58,52.68-52.68,52.68h-273.34v-118.1c0-20.04,16.25-36.29,36.29-36.29h138.99c16.57,0,30-13.43,30-30Z"/>
-                        <path class="logo-shape-left" fill="var(--accent)" d="M507.94,828.38c0-27.88,22.6-50.49,50.49-50.49h122.51c16.59,0,30.05-13.43,30.05-30v-147.84c0-16.57-13.45-30-30.05-30h-118.34c-27.1,0-49.07-21.97-49.07-49.07v-136.26h-5.59c-112.37,0-203.47,91.1-203.47,203.47v158.1c0,112.37,91.1,203.47,203.47,203.47h0v-121.38Z"/>
+                        <path class="logo-shape-left" fill="var(--accent)"
+                            d="M640,572.81v147.84c0,16.57-13.45,30-30.05,30h-122.51c-27.88,0-50.49,22.61-50.49,50.49v121.38c-112.37,0-203.47-91.1-203.47-203.47v-158.1c0-112.3,90.99-203.36,203.26-203.47h201.36v172.69h-179.36c8.71,7.86,21.21,20.83,33.86,20.83h118.33c16.6,0,29.07,5.24,29.07,21.81Z" />
+                        <path class="logo-shape-right" fill="var(--accent)"
+                            d="M882.67,396.1v486.09c0,20.67-16.76,37.43-37.43,37.43h-390v-119.61c0-18.84,15.35-34.11,34.28-34.11h126.86c18.3,0,39.24-14.76,39.24-32.97v-375.44h188.43c21.33,0,38.62,17.29,38.62,38.62Z" />
                     </svg>
                 </div>
                 <span class="logo-text">Captiongrit</span>
                 <span class="plan-badge plan-basic" id="plan-badge">Basic</span>
-                <span class="plan-badge" id="beta-indicator" style="display:none; background:var(--danger); margin-left:4px;"></span>
+                <span class="plan-badge" id="beta-indicator"
+                    style="display:none; background:var(--danger); margin-left:4px; white-space:nowrap;"></span>
+                <button class="btn btn-primary" id="beta-upgrade-btn" style="display:none; margin-left:auto; width:auto; font-size:10px; padding:4px 10px; border-radius:12px; border:none; cursor:pointer; flex:none; white-space:nowrap; align-self:center;">Upgrade Now</button>
             </div>
-            <span class="version">v1.0</span>
+            <span class="version">v1.0.1</span>
         </div>
 
         <!-- ═══════════ Tab Bar ═══════════ -->
@@ -93,9 +103,16 @@
             <div class="status-msg" id="status-msg"></div>
 
             <!-- 1. Selected Clip -->
-            <div class="section">
-                <div class="section-label"><span class="dot"></span>Selected Clip</div>
-                <div class="clip-box" id="clip-box">
+            <div class="section"
+                style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.05); border-radius:8px; padding:12px; margin-bottom:12px;">
+                <div class="section-label"
+                    style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                    <div><span class="dot"></span>Selected Clip</div>
+                    <button class="btn btn-primary" id="btn-read-clip"
+                        style="width:auto; padding:4px 10px; font-size:10px; border-radius:4px; min-height:0;">Select
+                        Clip</button>
+                </div>
+                <div class="clip-box" id="clip-box" style="margin-top:0;">
                     <div class="clip-empty" id="clip-empty">No clip selected</div>
                     <div id="clip-info" style="display:none">
                         <div class="clip-name" id="clip-name"></div>
@@ -107,75 +124,16 @@
                 </div>
             </div>
 
-            <!-- 2. Read Clip Button -->
-            <div class="section">
-                <button class="btn btn-icon" id="btn-read-clip">
-                    <span>⎔</span> Click to Read Selected Clip
-                </button>
-            </div>
+            <!-- Grouped Settings Box -->
+            <div
+                style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.05); border-radius:8px; padding:16px 12px 4px 12px; margin-bottom:12px;">
 
-            <!-- 3. STT Provider -->
-            <div class="section">
-                <div class="section-label"><span class="dot"></span>STT Provider</div>
-                <div class="select-wrap">
-                    <select id="stt-provider">
-                        <option value="elevenlabs">ElevenLabs Scribe</option>
-                        <option value="deepgram">Deepgram Nova-2</option>
-                    </select>
-                </div>
-            </div>
-
-            <!-- 4. Source Language -->
-            <div class="section">
-                <div class="section-label"><span class="dot"></span>Source Language</div>
-                <div class="select-wrap">
-                    <select id="source-lang">
-                        <option value="auto">Auto Detect</option>
-                        <optgroup label="Indian Languages">
-                            <option value="te">Telugu</option>
-                            <option value="hi">Hindi</option>
-                            <option value="ta">Tamil</option>
-                            <option value="kn">Kannada</option>
-                            <option value="ml">Malayalam</option>
-                            <option value="bn">Bengali</option>
-                            <option value="mr">Marathi</option>
-                            <option value="gu">Gujarati</option>
-                            <option value="pa">Punjabi</option>
-                            <option value="ur">Urdu</option>
-                        </optgroup>
-                        <optgroup label="Global Languages">
-                            <option value="en">English</option>
-                            <option value="es">Spanish</option>
-                            <option value="fr">French</option>
-                            <option value="de">German</option>
-                            <option value="pt">Portuguese</option>
-                            <option value="ja">Japanese</option>
-                            <option value="ko">Korean</option>
-                            <option value="ar">Arabic</option>
-                            <option value="id">Indonesian</option>
-                            <option value="th">Thai</option>
-                            <option value="zh">Chinese</option>
-                            <option value="ru">Russian</option>
-                            <option value="tr">Turkish</option>
-                            <option value="vi">Vietnamese</option>
-                        </optgroup>
-                    </select>
-                </div>
-            </div>
-
-            <!-- 5. Translate Toggle -->
-            <div class="section">
-                <div class="toggle-row">
-                    <span class="toggle-label">Translate Captions</span>
-                    <label class="toggle">
-                        <input type="checkbox" id="translate-toggle">
-                        <span class="toggle-slider"></span>
-                    </label>
-                </div>
-                <div class="translate-target" id="translate-target">
-                    <div class="section-label" style="margin-top:4px"><span class="dot"></span>Translate To</div>
+                <!-- 4. Source Language -->
+                <div class="section">
+                    <div class="section-label"><span class="dot"></span>Source Language</div>
                     <div class="select-wrap">
-                        <select id="translate-lang">
+                        <select id="source-lang">
+                            <option value="auto">Auto Detect</option>
                             <optgroup label="Indian Languages">
                                 <option value="te">Telugu</option>
                                 <option value="hi">Hindi</option>
@@ -207,66 +165,113 @@
                         </select>
                     </div>
                 </div>
-            </div>
 
-            <!-- 6. Caption Languages (Single Select) -->
-            <div class="section">
-                <div class="section-label"><span class="dot"></span>Caption Output</div>
-                <div class="pills" id="caption-langs" data-mode="single">
-                    <div class="pill active" data-lang="native_script">Native Script</div>
-                    <div class="pill" data-lang="phonetic">Roman</div>
+                <!-- 5. Translate Toggle -->
+                <div class="section">
+                    <div class="toggle-row">
+                        <span class="toggle-label">Translate Captions</span>
+                        <label class="toggle">
+                            <input type="checkbox" id="translate-toggle">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="translate-target" id="translate-target">
+                        <div class="section-label" style="margin-top:12px"><span class="dot"></span>Translate To</div>
+                        <div class="select-wrap">
+                            <select id="translate-lang">
+                                <optgroup label="Indian Languages">
+                                    <option value="te">Telugu</option>
+                                    <option value="hi">Hindi</option>
+                                    <option value="ta">Tamil</option>
+                                    <option value="kn">Kannada</option>
+                                    <option value="ml">Malayalam</option>
+                                    <option value="bn">Bengali</option>
+                                    <option value="mr">Marathi</option>
+                                    <option value="gu">Gujarati</option>
+                                    <option value="pa">Punjabi</option>
+                                    <option value="ur">Urdu</option>
+                                </optgroup>
+                                <optgroup label="Global Languages">
+                                    <option value="en">English</option>
+                                    <option value="es">Spanish</option>
+                                    <option value="fr">French</option>
+                                    <option value="de">German</option>
+                                    <option value="pt">Portuguese</option>
+                                    <option value="ja">Japanese</option>
+                                    <option value="ko">Korean</option>
+                                    <option value="ar">Arabic</option>
+                                    <option value="id">Indonesian</option>
+                                    <option value="th">Thai</option>
+                                    <option value="zh">Chinese</option>
+                                    <option value="ru">Russian</option>
+                                    <option value="tr">Turkish</option>
+                                    <option value="vi">Vietnamese</option>
+                                </optgroup>
+                            </select>
+                        </div>
+                        <div id="translation-example-widget" class="section-hint"
+                            style="font-size:11px;opacity:0.9;margin-top:10px;background:rgba(0,0,0,0.2);color:var(--text-primary);padding:8px;border-radius:6px;text-align:center;border:1px solid rgba(255,255,255,0.05);display:none;">
+                            <!-- Injected via JS -->
+                        </div>
+                    </div>
                 </div>
-            </div>
 
-            <!-- 7. AI Provider -->
-            <div class="section">
-                <div class="section-label"><span class="dot"></span>AI Provider</div>
-                <div class="select-wrap">
-                    <select id="ai-provider">
-                        <option value="auto">Auto (best free model)</option>
-                        <option value="gemini">Google Gemini Flash</option>
-                        <option value="xai">xAI Grok</option>
-                        <option value="groq">Groq (Llama)</option>
-                        <option value="openrouter">OpenRouter</option>
-                    </select>
+                <!-- 6. Caption Languages (Single Select) -->
+                <div class="section">
+                    <div class="section-label"><span class="dot"></span>Caption Output</div>
+                    <div class="pills" id="caption-langs" data-mode="single">
+                        <div class="pill active" data-lang="native_script">Native Script</div>
+                        <div class="pill" data-lang="phonetic">English Letters</div>
+                    </div>
+                    <div id="caption-output-hint" class="section-hint"
+                        style="font-size:10px;opacity:0.6;margin-top:6px;">
+                        Output will be in Native Script
+                    </div>
                 </div>
-            </div>
 
-            <!-- 8. Caption Style -->
-            <div class="section">
-                <div class="section-label"><span class="dot"></span>Caption Style</div>
-                <div class="pills" id="caption-style" data-mode="single">
-                    <div class="pill active" data-style="single_line" title="Max 4–5 words per caption">Natural Phrase</div>
-                    <div class="pill" data-style="double_line" title="Complete sentences as captions">Full Sentence</div>
-                    <div class="pill" data-style="word_by_word" title="Each word shown individually">Word-by-Word</div>
+
+
+                <!-- 8. Caption Style -->
+                <div class="section">
+                    <div class="section-label"><span class="dot"></span>Caption Style</div>
+                    <div class="pills" id="caption-style" data-mode="single">
+                        <div class="pill active" data-style="single_line" title="Max 4–5 words per caption">Natural
+                            Phrase
+                        </div>
+                        <div class="pill" data-style="double_line" title="Complete sentences as captions">Full Sentence
+                        </div>
+                        <div class="pill" data-style="word_by_word" title="Each word shown individually">Word-by-Word
+                        </div>
+                    </div>
                 </div>
-            </div>
 
 
-            <!-- 9. Output Options -->
-            <div class="section">
-                <div class="section-label"><span class="dot"></span>Output</div>
-                <div class="pills" id="output-options" data-mode="multi">
-                    <div class="pill active" data-output="text_layers">Text Layers in AE</div>
-                    <div class="pill" data-output="srt_export">SRT File Export</div>
+                <!-- 9. Output Options -->
+                <div class="section">
+                    <div class="section-label"><span class="dot"></span>Output</div>
+                    <div class="pills" id="output-options" data-mode="multi">
+                        <div class="pill active" data-output="text_layers">Text Layers in AE</div>
+                        <div class="pill" data-output="srt_export">SRT File Export</div>
+                    </div>
                 </div>
-            </div>
 
-            <!-- 9b. Verification Pass Toggle -->
-            <div class="section">
-                <div class="toggle-row">
-                    <span class="toggle-label">Double-Check Accuracy</span>
-                    <label class="toggle">
-                        <input type="checkbox" id="verification-toggle">
-                        <span class="toggle-slider"></span>
-                    </label>
+                <!-- 9b. Verification Pass Toggle -->
+                <div class="section">
+                    <div class="toggle-row">
+                        <span class="toggle-label">Double-Check Accuracy</span>
+                        <label class="toggle">
+                            <input type="checkbox" id="verification-toggle">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>
+                    <div class="section-hint" style="font-size:10px;opacity:0.5;margin-top:4px;">
+                        Fixes spelling & split words (Uses extra AI tokens)
+                    </div>
                 </div>
-                <div class="section-hint" style="font-size:10px;opacity:0.5;margin-top:4px;">
-                    Fixes spelling & split words (Uses extra AI tokens)
-                </div>
+
+
             </div>
-
-
+            <!-- End Grouped Settings Box -->
 
             <!-- 10. Generate Button -->
             <div class="section" id="generate-section">
@@ -303,23 +308,65 @@
 
         <!-- ═══════════ ADVANCED TAB ═══════════ -->
         <div class="tab-content" id="tab-advanced">
+
             <div class="settings-header">
                 <svg viewBox="0 0 24 24">
-                    <path fill="currentColor" d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zM7 10h2v7H7zm4-3h2v10h-2zm4 6h2v4h-2z"/>
+                    <path fill="currentColor"
+                        d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z" />
+                </svg>
+                Processing Settings
+            </div>
+
+            <div class="api-section">
+                <div class="api-section-header">
+                    <span class="api-section-name">STT Provider</span>
+                </div>
+                <div class="api-section-hint">Speech-to-Text engine for transcription.</div>
+                <div class="select-wrap">
+                    <select id="stt-provider">
+                        <option value="elevenlabs">ElevenLabs Scribe</option>
+                        <option value="deepgram">Deepgram Nova-2</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="api-section">
+                <div class="api-section-header">
+                    <span class="api-section-name">AI Provider</span>
+                </div>
+                <div class="api-section-hint">AI engine for translation and formatting.</div>
+                <div class="select-wrap">
+                    <select id="ai-provider">
+                        <option value="auto">Auto (best free model)</option>
+                        <option value="gemini">Google Gemini Flash</option>
+                        <option value="xai">xAI Grok</option>
+                        <option value="groq">Groq (Llama)</option>
+                        <option value="openrouter">OpenRouter</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="divider"></div>
+            <div class="settings-header">
+                <svg viewBox="0 0 24 24">
+                    <path fill="currentColor"
+                        d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14zM7 10h2v7H7zm4-3h2v10h-2zm4 6h2v4h-2z" />
                 </svg>
                 Custom Dictionary
             </div>
-            
+
             <div class="api-section">
                 <div class="api-section-header">
                     <span class="api-section-name">Brand Names & Vocabulary</span>
                 </div>
-                <div class="api-section-hint">Enter specific brand names or industry terms (comma separated) so the AI spells them perfectly.</div>
-                <textarea id="custom-vocab" class="input-key" style="min-height: 80px; resize: vertical;" placeholder="e.g. Captiongrit, Adobe, Hormozi, ChatGPT"></textarea>
+                <div class="api-section-hint">Enter specific brand names or industry terms (comma separated) so the AI
+                    spells them perfectly.</div>
+                <textarea id="custom-vocab" class="input-key" style="min-height: 80px; resize: vertical;"
+                    placeholder="e.g. Captiongrit, Adobe, Hormozi, ChatGPT"></textarea>
             </div>
-            
+
             <div class="divider"></div>
-            
+
             <button class="btn btn-primary" id="btn-save-advanced">Save Advanced Settings</button>
             <div class="save-feedback" id="save-advanced-feedback">✓ Settings saved</div>
         </div>
@@ -327,27 +374,7 @@
         <!-- ═══════════ SETTINGS TAB ═══════════ -->
         <div class="tab-content" id="tab-settings">
 
-            <div class="settings-header">
-                <svg viewBox="0 0 24 24">
-                    <path fill="currentColor" d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zm-5.5 9c-.83 0-1.5-.67-1.5-1.5S5.67 9 6.5 9 8 9.67 8 10.5 7.33 12 6.5 12zm3-4C8.67 8 8 7.33 8 6.5S8.67 5 9.5 5s1.5.67 1.5 1.5S10.33 8 9.5 8zm5 0c-.83 0-1.5-.67-1.5-1.5S13.67 5 14.5 5s1.5.67 1.5 1.5S15.33 8 14.5 8zm3 4c-.83 0-1.5-.67-1.5-1.5S16.67 9 17.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>
-                </svg>
-                Appearance
-            </div>
-            
-            <div class="api-section">
-                <div class="api-section-header">
-                    <span class="api-section-name">
-                        Primary Color
-                    </span>
-                </div>
-                <div class="api-section-hint">Choose accent color for UI elements</div>
-                <div style="display:flex; gap:8px; align-items:center;">
-                    <input type="color" id="primary-color-picker" value="#C6FF34" style="width:40px;height:32px;padding:0;border:none;border-radius:4px;cursor:pointer;">
-                    <button class="btn btn-sm" id="btn-reset-color" style="flex:none;width:auto;">Reset</button>
-                </div>
-            </div>
 
-            <div class="divider"></div>
 
             <div class="settings-header">
                 <svg viewBox="0 0 16 16">
@@ -359,7 +386,10 @@
             </div>
 
             <div class="settings-note">
-                All APIs below offer <strong>free tiers</strong>. Create your own keys — no paid plan needed.
+                All APIs below offer <strong>free tiers</strong>. Create your own keys — no paid plan needed.<br><br>
+                📺 <strong>Need Help?</strong> <a href="#" id="link-help-api"
+                    style="color:#000000; font-weight:700; text-decoration:underline;">Watch how to get your FREE API
+                    keys</a>
             </div>
 
             <!-- ElevenLabs -->
@@ -451,15 +481,34 @@
 
             <div class="divider"></div>
 
+            <!-- Software Update -->
+            <div class="settings-header">
+                <svg viewBox="0 0 24 24">
+                    <path fill="currentColor"
+                        d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z" />
+                </svg>
+                Software Update
+            </div>
+            <div class="api-section">
+                <div class="api-section-hint" id="settings-update-status" style="color:var(--text-primary)">Checking for
+                    updates...</div>
+                <button class="btn btn-primary btn-sm mt-8" id="btn-settings-download-update"
+                    style="display:none; background:var(--accent); color:#111;">Download Update</button>
+            </div>
+
+            <div class="divider"></div>
+
             <!-- Licensing Status -->
             <div class="settings-header">
                 <svg viewBox="0 0 16 16">
-                    <path d="M8 8a3 3 0 100-6 3 3 0 000 6zm2-3a2 2 0 11-4 0 2 2 0 014 0zm4 8c0-1-1-4-6-4s-6 3-6 4v1h12v-1z"/>
+                    <path
+                        d="M8 8a3 3 0 100-6 3 3 0 000 6zm2-3a2 2 0 11-4 0 2 2 0 014 0zm4 8c0-1-1-4-6-4s-6 3-6 4v1h12v-1z" />
                 </svg>
                 License Information
             </div>
             <div class="api-section">
-                <div class="api-section-hint">License active for: <strong id="license-active-email" style="color:var(--text-primary)">—</strong></div>
+                <div class="api-section-hint">License active for: <strong id="license-active-email"
+                        style="color:var(--text-primary)">—</strong></div>
                 <button class="btn btn-danger btn-sm mt-8" id="btn-deactivate-license">Deactivate License</button>
             </div>
 
@@ -468,7 +517,8 @@
             <!-- FFmpeg Configuration -->
             <div class="settings-header">
                 <svg viewBox="0 0 24 24">
-                    <path fill="currentColor" d="M21.4 7.5c-.8-1.4-2.1-2.4-3.6-2.9L16.2 2h-8.4L6.2 4.6C4.7 5.1 3.4 6.1 2.6 7.5L2 12l.6 4.5c.8 1.4 2.1 2.4 3.6 2.9l1.6 2.6h8.4l1.6-2.6c1.5-.5 2.8-1.5 3.6-2.9l.6-4.5-.6-4.5zM12 17c-2.8 0-5-2.2-5-5s2.2-5 5-5 5 2.2 5 5-2.2 5-5 5z"/>
+                    <path fill="currentColor"
+                        d="M21.4 7.5c-.8-1.4-2.1-2.4-3.6-2.9L16.2 2h-8.4L6.2 4.6C4.7 5.1 3.4 6.1 2.6 7.5L2 12l.6 4.5c.8 1.4 2.1 2.4 3.6 2.9l1.6 2.6h8.4l1.6-2.6c1.5-.5 2.8-1.5 3.6-2.9l.6-4.5-.6-4.5zM12 17c-2.8 0-5-2.2-5-5s2.2-5 5-5 5 2.2 5 5-2.2 5-5 5z" />
                 </svg>
                 FFmpeg Configuration
             </div>
@@ -478,31 +528,60 @@
                     <span class="badge" id="ffmpeg-status-badge" style="background:#555;color:#fff;">Detecting...</span>
                 </div>
                 <div class="api-section-hint">Auto-detected automatically. Use Browse to override.</div>
-                
+
                 <div style="display:flex; gap:8px; align-items:center; margin-bottom: 8px;">
-                    <input type="text" class="input-key" id="ffmpeg-path-input" readonly placeholder="Detecting path..." style="flex: 1; min-width: 0; padding: 8px 10px; font-size: 10px; color: var(--text-secondary);">
+                    <input type="text" class="input-key" id="ffmpeg-path-input" readonly placeholder="Detecting path..."
+                        style="flex: 1; min-width: 0; padding: 8px 10px; font-size: 10px; color: var(--text-secondary);">
                     <button class="btn btn-sm" id="btn-browse-ffmpeg" style="flex:none; width:auto;">Browse...</button>
                 </div>
-                
-                <button class="btn btn-sm" id="btn-copy-diagnostics" style="width:100%; opacity: 0.8; font-weight: normal;">Copy Diagnostics to Clipboard</button>
+
+                <button class="btn btn-sm" id="btn-copy-diagnostics"
+                    style="width:100%; opacity: 0.8; font-weight: normal;">Copy Diagnostics to Clipboard</button>
+            </div>
+
+            <div class="divider"></div>
+
+            <div class="settings-header">
+                <svg viewBox="0 0 24 24">
+                    <path fill="currentColor"
+                        d="M12 3c-4.97 0-9 4.03-9 9s4.03 9 9 9c.83 0 1.5-.67 1.5-1.5 0-.39-.15-.74-.39-1.01-.23-.26-.38-.61-.38-.99 0-.83.67-1.5 1.5-1.5H16c2.76 0 5-2.24 5-5 0-4.42-4.03-8-9-8zm-5.5 9c-.83 0-1.5-.67-1.5-1.5S5.67 9 6.5 9 8 9.67 8 10.5 7.33 12 6.5 12zm3-4C8.67 8 8 7.33 8 6.5S8.67 5 9.5 5s1.5.67 1.5 1.5S10.33 8 9.5 8zm5 0c-.83 0-1.5-.67-1.5-1.5S13.67 5 14.5 5s1.5.67 1.5 1.5S15.33 8 14.5 8zm3 4c-.83 0-1.5-.67-1.5-1.5S16.67 9 17.5 9s1.5.67 1.5 1.5-.67 1.5-1.5 1.5z" />
+                </svg>
+                Appearance
+            </div>
+
+            <div class="api-section">
+                <div class="api-section-header">
+                    <span class="api-section-name">
+                        Primary Color
+                    </span>
+                </div>
+                <div class="api-section-hint">Choose accent color for UI elements</div>
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <input type="color" id="primary-color-picker" value="#C6FF34"
+                        style="width:40px;height:32px;padding:0;border:none;border-radius:4px;cursor:pointer;">
+                    <button class="btn btn-sm" id="btn-reset-color" style="flex:none;width:auto;">Reset</button>
+                </div>
             </div>
 
         </div>
-        
+
         <!-- ═══════════ CAPTION EDITOR PANEL ═══════════ -->
         <div id="editor-panel" class="editor-panel" style="display:none;">
             <div class="editor-header">
                 <button id="btn-editor-back" class="btn btn-sm" style="width:auto">← Back</button>
-                <span style="font-weight:700;font-size:12px;letter-spacing:1px;text-transform:uppercase;">Review Captions</span>
+                <span style="font-weight:700;font-size:12px;letter-spacing:1px;text-transform:uppercase;">Review
+                    Captions</span>
             </div>
             <div class="editor-controls">
                 <input type="text" id="editor-find" placeholder="Find word...">
                 <input type="text" id="editor-replace" placeholder="Replace with...">
-                <label class="editor-checkbox-label" title="Match whole words only (won't replace 'di' inside 'discord')">
+                <label class="editor-checkbox-label"
+                    title="Match whole words only (won't replace 'di' inside 'discord')">
                     <input type="checkbox" id="editor-whole-word" checked> Whole word
                 </label>
                 <button id="btn-editor-replace" class="btn btn-sm" style="width:auto">Apply</button>
-                <button id="btn-editor-delete-word" class="btn btn-sm btn-danger" style="width:auto;margin-left:4px;">Delete Word</button>
+                <button id="btn-editor-delete-word" class="btn btn-sm btn-danger"
+                    style="width:auto;margin-left:4px;">Delete Word</button>
             </div>
             <div class="editor-table-container">
                 <table class="editor-table">
@@ -519,10 +598,16 @@
                 </table>
             </div>
             <div class="editor-footer">
+                <button id="btn-editor-ai-improve" class="btn btn-primary"
+                    style="margin-right:auto; background:var(--accent); color:#111;">✨ AI Improve</button>
                 <button id="btn-editor-import" class="btn btn-primary">▶ Import to Timeline</button>
-                <button id="btn-editor-export" class="btn btn-sm" style="width:auto;margin-left:8px;">Export SRT</button>
+
+                <button id="btn-editor-export" class="btn btn-sm" style="width:auto;margin-left:8px;">Export
+                    SRT</button>
             </div>
         </div>
+
+
 
     </div>
 
@@ -533,10 +618,11 @@
             <h3>Upgrade to <span id="upgrade-plan-name">Pro</span></h3>
             <p id="upgrade-feature-desc">Unlock more powerful features.</p>
             <div class="upgrade-price-row">
-                <span>Upgrade for just</span>
+                <span id="upgrade-price-prefix">Upgrade for just</span>
                 <span class="upgrade-price" id="upgrade-price">₹200</span>
             </div>
-            <a href="https://your-razorpay-payment-link.com" target="_blank" class="btn btn-primary upgrade-btn">🚀 Upgrade Now</a>
+            <a href="https://www.flogrit.com/captiongrit#pricing" target="_blank" class="btn btn-primary upgrade-btn">🚀
+                Upgrade Now</a>
             <button class="btn btn-sm" id="btn-close-upgrade" style="margin-top:8px;opacity:0.7">Maybe Later</button>
         </div>
     </div>
@@ -557,7 +643,34 @@
     </div>
 
     <script src="lib/CSInterface.js"></script>
-    <script src="main.js?v=1.0.0"></script>
+    <script>
+        // Failsafe: if main.js fails to load or hangs, dismiss loading screen after 8 seconds
+        (function () {
+            var _failsafe = setTimeout(function () {
+                var ls = document.getElementById("loading-screen");
+                if (ls && ls.style.display !== "none") {
+                    ls.querySelector("h2").textContent = "Loading timed out";
+                    ls.querySelector("p").textContent = "main.js may have failed to load. Check DevTools (localhost:8089).";
+                    setTimeout(function () {
+                        ls.style.display = "none";
+                        var auth = document.getElementById("auth-screen");
+                        if (auth) auth.style.display = "flex";
+                    }, 3000);
+                }
+            }, 8000);
+            window.__clearLoadingFailsafe = function () { clearTimeout(_failsafe); };
+            // Catch script load errors
+            window.addEventListener("error", function (e) {
+                var ls = document.getElementById("loading-screen");
+                if (ls && ls.style.display !== "none") {
+                    ls.querySelector("h2").textContent = "Error";
+                    ls.querySelector("p").textContent = (e.message || "Unknown error") + " at " + (e.filename || "") + ":" + (e.lineno || "");
+                }
+            });
+        })();
+    </script>
+
+    <script src="main.js"></script>
 </body>
 
 </html>

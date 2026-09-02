@@ -7,7 +7,7 @@ function App() {
   
   // Global Settings
   const [adminSecret, setAdminSecret] = useState('');
-  const [appsScriptUrl, setAppsScriptUrl] = useState('https://script.google.com/macros/s/AKfycbwLhbQUbJmmGvl6ZEtUfHhagiNUqbMXiJgX67DGqA6Ij2y2xvknkXUYuPsfLEDrDEWS/exec');
+  const [appsScriptUrl, setAppsScriptUrl] = useState('https://script.google.com/macros/s/AKfycbzcduRbPRxFLYLMOB5oOXPZqazf4_xlqwWz3zBjKG-R6h3QSSdhI7aZvv2a7ALHvLxn/exec');
 
   // Single Form State
   const [singleName, setSingleName] = useState('');

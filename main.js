@@ -38,6 +38,93 @@
     var editorSegments = [];
     var editorOutputOptions = [];
 
+    // Fetch with timeout helper — prevents hanging forever on slow/blocked networks
+    function fetchWithTimeout(url, options, timeoutMs) {
+        timeoutMs = timeoutMs || 10000;
+        return new Promise(function (resolve, reject) {
+            var isDone = false;
+            var timer = setTimeout(function () {
+                if (!isDone) {
+                    isDone = true;
+                    reject(new Error("Request timed out after " + timeoutMs + "ms"));
+                }
+            }, timeoutMs);
+
+            try {
+                if (typeof window !== "undefined" && window.require) {
+                    var https = window.require("https");
+                    var URL = window.require("url");
+
+                    function doReq(currentUrl, method, postData) {
+                        var parsedUrl = URL.parse(currentUrl);
+                        var reqOptions = {
+                            hostname: parsedUrl.hostname,
+                            port: parsedUrl.port || 443,
+                            path: parsedUrl.path,
+                            method: method,
+                            headers: {}
+                        };
+
+                        if (method === "POST" && postData) {
+                            reqOptions.headers["Content-Type"] = "text/plain";
+                            reqOptions.headers["Content-Length"] = Buffer.byteLength(postData);
+                        }
+
+                        var req = https.request(reqOptions, function (res) {
+                            if (isDone) return;
+                            if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+                                doReq(res.headers.location, "GET", null);
+                                return;
+                            }
+                            var data = '';
+                            res.on('data', function (chunk) { data += chunk; });
+                            res.on('end', function () {
+                                if (isDone) return;
+                                isDone = true;
+                                clearTimeout(timer);
+                                resolve({
+                                    ok: res.statusCode >= 200 && res.statusCode < 300,
+                                    status: res.statusCode,
+                                    text: function () { return Promise.resolve(data); },
+                                    json: function () { return Promise.resolve(JSON.parse(data)); }
+                                });
+                            });
+                        });
+
+                        req.on('error', function (e) {
+                            if (isDone) return;
+                            isDone = true;
+                            clearTimeout(timer);
+                            reject(e);
+                        });
+
+                        if (method === "POST" && postData) req.write(postData);
+                        req.end();
+                    }
+                    doReq(url, options.method || "GET", options.body);
+                } else {
+                    fetch(url, options).then(function (response) {
+                        if (isDone) return;
+                        isDone = true;
+                        clearTimeout(timer);
+                        resolve(response);
+                    }).catch(function (err) {
+                        if (isDone) return;
+                        isDone = true;
+                        clearTimeout(timer);
+                        reject(err);
+                    });
+                }
+            } catch (err) {
+                if (!isDone) {
+                    isDone = true;
+                    clearTimeout(timer);
+                    reject(err);
+                }
+            }
+        });
+    }
+
     var cp = null;
     var fs = null;
     try {
@@ -66,6 +153,33 @@
         "fr": "French", "de": "German", "pt": "Portuguese", "ja": "Japanese",
         "ko": "Korean", "ar": "Arabic", "id": "Indonesian", "th": "Thai",
         "zh": "Chinese", "ru": "Russian", "tr": "Turkish", "vi": "Vietnamese"
+    };
+
+    var LANG_EXAMPLES = {
+        "te": { native: "నమస్కారం", phonetic: "Namaskaram" },
+        "hi": { native: "नमस्ते", phonetic: "Namaste" },
+        "ta": { native: "வணக்கம்", phonetic: "Vanakkam" },
+        "kn": { native: "ನಮಸ್ಕಾರ", phonetic: "Namaskara" },
+        "ml": { native: "നമസ്കാരം", phonetic: "Namaskaram" },
+        "bn": { native: "নমস্কার", phonetic: "Nômoskar" },
+        "mr": { native: "नमस्कार", phonetic: "Namaskar" },
+        "gu": { native: "નમસ્તે", phonetic: "Namaste" },
+        "pa": { native: "ਸਤਿ ਸ੍ਰੀ ਅਕਾਲ", phonetic: "Sat Sri Akal" },
+        "ur": { native: "سلام", phonetic: "Salam" },
+        "en": { native: "Hello", phonetic: "Hello" },
+        "es": { native: "Hola", phonetic: "Hola" },
+        "fr": { native: "Bonjour", phonetic: "Bonjour" },
+        "de": { native: "Hallo", phonetic: "Hallo" },
+        "pt": { native: "Olá", phonetic: "Olá" },
+        "ja": { native: "こんにちは", phonetic: "Konnichiwa" },
+        "ko": { native: "안녕하세요", phonetic: "Annyeonghaseyo" },
+        "ar": { native: "مرحبا", phonetic: "Marhaba" },
+        "id": { native: "Halo", phonetic: "Halo" },
+        "th": { native: "สวัสดี", phonetic: "Sawatdee" },
+        "zh": { native: "你好", phonetic: "Nǐ hǎo" },
+        "ru": { native: "Привет", phonetic: "Privet" },
+        "tr": { native: "Merhaba", phonetic: "Merhaba" },
+        "vi": { native: "Xin chào", phonetic: "Xin chao" }
     };
 
     // ------------------------------------------
@@ -99,8 +213,11 @@
 
         var buyBtn = document.getElementById("buyBtn");
         if (buyBtn) {
-            buyBtn.addEventListener("click", function() {
-                window.cep.util.openURLInDefaultBrowser("https://your-razorpay-payment-link.com");
+            buyBtn.addEventListener("click", function () {
+                var e = localStorage.getItem("captiongrit_email") || "";
+                var k = localStorage.getItem("captiongrit_key") || "";
+                var url = "https://www.flogrit.com/captiongrit" + (e && k ? "?email=" + encodeURIComponent(e) + "&key=" + encodeURIComponent(k) : "") + "#pricing";
+                window.cep.util.openURLInDefaultBrowser(url);
             });
         }
 
@@ -112,14 +229,32 @@
         initTheme();
         loadApiKeys();
         loadAdvancedSettings();
+        loadGenerationSettings(); // NEW: Load smart defaults
         bindButtons();
+        updateDynamicHint(); // NEW: Initial hint render
 
         var storedEmail = localStorage.getItem("captiongrit_email");
         var storedKey = localStorage.getItem("captiongrit_key");
         var storedDeviceId = localStorage.getItem("captiongrit_device_id");
 
+        // Clear HTML failsafe since main.js loaded successfully
+        if (typeof window.__clearLoadingFailsafe === "function") {
+            window.__clearLoadingFailsafe();
+        }
+
+        // Failsafe: if loading screen is still visible after 12 seconds, force-dismiss it
+        var _loadingFailsafe = setTimeout(function () {
+            var ls = document.getElementById("loading-screen");
+            if (ls && ls.style.display !== "none") {
+                console.warn("Captiongrit: Loading failsafe triggered — hiding loading screen.");
+                ls.style.display = "none";
+                showLicensePanel();
+            }
+        }, 12000);
+
         if (storedEmail && storedKey && storedDeviceId) {
             validateLicense(storedEmail, storedKey, storedDeviceId).then(function (response) {
+                clearTimeout(_loadingFailsafe);
                 var loadingScreen = document.getElementById("loading-screen");
                 if (loadingScreen) loadingScreen.style.display = "none";
 
@@ -127,10 +262,28 @@
                     window.CaptiongritSession = response;
                     TIER = window.CaptiongritSession.capabilities;
                     localStorage.setItem(STORAGE_PREFIX + "auth_email", storedEmail);
+                    localStorage.setItem(STORAGE_PREFIX + "capabilities", JSON.stringify(TIER));
                     showMainPanel(response.betaDaysLeft);
-                    
+
                     applyFeatureGating();
                     if (TIER.hasPresets) initPresets();
+                } else if (response.reason === "network_error" || response.reason === "invalid_response") {
+                    console.warn("Captiongrit: Network error validating license. Using saved capabilities for offline bypass.");
+                    var savedCapabilities = localStorage.getItem(STORAGE_PREFIX + "capabilities");
+                    if (savedCapabilities) {
+                        try {
+                            TIER = JSON.parse(savedCapabilities);
+                            window.CaptiongritSession = { authenticated: true, capabilities: TIER };
+                            showMainPanel();
+                            applyFeatureGating();
+                            if (TIER.hasPresets) initPresets();
+                            return;
+                        } catch (e) {
+                            console.error("Failed to parse saved capabilities", e);
+                        }
+                    }
+                    showLicensePanel();
+                    showError("Could not reach license server. Check your internet connection.");
                 } else {
                     showLicensePanel();
                     if (response.reason === "device_limit_reached") {
@@ -143,8 +296,32 @@
                         showError("License invalid or expired.");
                     }
                 }
+            }).catch(function (err) {
+                clearTimeout(_loadingFailsafe);
+                console.error("License validation promise rejected:", err);
+                var loadingScreen = document.getElementById("loading-screen");
+                if (loadingScreen) loadingScreen.style.display = "none";
+
+                console.warn("Captiongrit: Network error validating license. Using saved capabilities for offline bypass.");
+                var savedCapabilities = localStorage.getItem(STORAGE_PREFIX + "capabilities");
+                if (savedCapabilities) {
+                    try {
+                        TIER = JSON.parse(savedCapabilities);
+                        window.CaptiongritSession = { authenticated: true, capabilities: TIER };
+                        showMainPanel();
+                        applyFeatureGating();
+                        if (TIER.hasPresets) initPresets();
+                        return;
+                    } catch (e) {
+                        console.error("Failed to parse saved capabilities", e);
+                    }
+                }
+
+                showLicensePanel();
+                showError("Could not validate license (network error). Please check your internet connection.");
             });
         } else {
+            clearTimeout(_loadingFailsafe);
             var loadingScreen = document.getElementById("loading-screen");
             if (loadingScreen) loadingScreen.style.display = "none";
             showLicensePanel();
@@ -195,9 +372,124 @@
                     } else {
                         pill.classList.toggle("active");
                     }
+                    saveGenerationSettings();
+                    updateDynamicHint();
                 });
             });
         });
+    }
+
+    // ------------------------------------------
+    // Smart Defaults & Dynamic Hints
+    // ------------------------------------------
+    function loadGenerationSettings() {
+        var stt = localStorage.getItem(STORAGE_PREFIX + "stt-provider");
+        if (stt) document.getElementById("stt-provider").value = stt;
+
+        var ai = localStorage.getItem(STORAGE_PREFIX + "ai-provider");
+        if (ai) document.getElementById("ai-provider").value = ai;
+
+        var src = localStorage.getItem(STORAGE_PREFIX + "source-lang");
+        if (src) document.getElementById("source-lang").value = src;
+
+        var verify = localStorage.getItem(STORAGE_PREFIX + "verification-toggle");
+        if (verify !== null) document.getElementById("verification-toggle").checked = (verify === "true");
+
+        var captionOutput = localStorage.getItem(STORAGE_PREFIX + "caption-output");
+        if (captionOutput) {
+            document.querySelectorAll('#caption-langs .pill').forEach(function (pill) {
+                pill.classList.remove('active');
+                if (pill.getAttribute('data-lang') === captionOutput) pill.classList.add('active');
+            });
+        }
+
+        var captionStyle = localStorage.getItem(STORAGE_PREFIX + "caption-style");
+        if (captionStyle) {
+            document.querySelectorAll('#caption-style .pill').forEach(function (pill) {
+                pill.classList.remove('active');
+                if (pill.getAttribute('data-style') === captionStyle) pill.classList.add('active');
+            });
+        }
+    }
+
+    function saveGenerationSettings() {
+        localStorage.setItem(STORAGE_PREFIX + "stt-provider", document.getElementById("stt-provider").value);
+        localStorage.setItem(STORAGE_PREFIX + "ai-provider", document.getElementById("ai-provider").value);
+        localStorage.setItem(STORAGE_PREFIX + "source-lang", document.getElementById("source-lang").value);
+        localStorage.setItem(STORAGE_PREFIX + "verification-toggle", document.getElementById("verification-toggle").checked);
+
+        var captionOutputPill = getSelectedPills("caption-langs")[0];
+        if (captionOutputPill) localStorage.setItem(STORAGE_PREFIX + "caption-output", captionOutputPill);
+
+        var captionStylePill = getSelectedPills("caption-style")[0];
+        if (captionStylePill) localStorage.setItem(STORAGE_PREFIX + "caption-style", captionStylePill);
+    }
+
+    function updateDynamicHint() {
+        var hintEl = document.getElementById("caption-output-hint");
+        var exampleWidget = document.getElementById("translation-example-widget");
+
+        var srcLang = document.getElementById("source-lang").value;
+        var outputMode = getSelectedPills("caption-langs")[0] || "native_script";
+        var langName = LANG_NAMES[srcLang] || "Auto/Source";
+
+        var isTranslate = document.getElementById("translate-toggle").checked;
+        var targetLangId = document.getElementById("translate-lang").value;
+        var targetLangName = LANG_NAMES[targetLangId] || "Target";
+
+        // 1. Update the Dynamic Example Widget
+        if (exampleWidget) {
+            if (isTranslate) {
+                exampleWidget.style.display = "block";
+
+                var sourceWord = "Hello";
+                if (srcLang !== "auto" && LANG_EXAMPLES[srcLang]) {
+                    sourceWord = LANG_EXAMPLES[srcLang].native;
+                } else if (srcLang === "auto") {
+                    sourceWord = "[Auto-Detected]";
+                }
+
+                var targetWord = "Target";
+                if (LANG_EXAMPLES[targetLangId]) {
+                    targetWord = outputMode === "phonetic"
+                        ? LANG_EXAMPLES[targetLangId].phonetic
+                        : LANG_EXAMPLES[targetLangId].native;
+                }
+
+                exampleWidget.innerHTML = "<span style='opacity:0.8;font-size:10px'>" + sourceWord + "</span> <span style='opacity:0.5; margin:0 6px;'>➔</span> <strong style='color:var(--text-primary); font-size:12px; letter-spacing:0.5px;'>" + targetWord + "</strong>";
+            } else {
+                exampleWidget.style.display = "none";
+            }
+        }
+
+        // 2. Update the Text Hint
+        if (!hintEl) return;
+
+        if (outputMode === "phonetic") {
+            // English Letters selected
+            var phoneticName = "English Letters";
+            var baseLangId = isTranslate ? targetLangId : srcLang;
+
+            if (baseLangId === "te") phoneticName = "Tanglish (Telugu in English)";
+            else if (baseLangId === "hi") phoneticName = "Hinglish (Hindi in English)";
+            else if (baseLangId === "ta") phoneticName = "Tanglish (Tamil in English)";
+            else if (baseLangId === "kn") phoneticName = "Kanglish (Kannada in English)";
+            else if (baseLangId === "ml") phoneticName = "Manglish (Malayalam in English)";
+            else if (baseLangId === "bn") phoneticName = "Benglish (Bengali in English)";
+
+            if (isTranslate) {
+                hintEl.textContent = langName + " to " + targetLangName + " (" + phoneticName + ")";
+            } else {
+                hintEl.textContent = "Output: " + phoneticName;
+            }
+        } else {
+            // Native script selected
+            if (isTranslate) {
+                hintEl.textContent = langName + " to " + targetLangName + " (in native script)";
+            } else {
+                hintEl.textContent = "Output: " + langName + " Script";
+            }
+        }
     }
 
     // ------------------------------------------
@@ -213,6 +505,8 @@
             } else {
                 target.classList.remove("visible");
             }
+            saveGenerationSettings();
+            updateDynamicHint();
         });
     }
 
@@ -351,6 +645,7 @@
 
         var planName = document.getElementById("upgrade-plan-name");
         var desc = document.getElementById("upgrade-feature-desc");
+        var prefixEl = document.getElementById("upgrade-price-prefix");
         var priceEl = document.getElementById("upgrade-price");
 
         if (planName) planName.textContent = PLAN_LABELS[requiredPlan] || requiredPlan;
@@ -358,10 +653,35 @@
 
         // Calculate upgrade price
         var pricing = {
-            "basic-pro": "\u20B9200", "basic-extreme": "\u20B9600", "pro-extreme": "\u20B9400"
+            "basic-pro": { prefix: "Upgrade for just", price: "₹200" },
+            "basic-extreme": { prefix: "Upgrade for just", price: "₹600" },
+            "pro-extreme": { prefix: "Upgrade for just", price: "₹400" },
+            "beta-basic": { prefix: "Starts at", price: "₹399" },
+            "beta-pro": { prefix: "Starts at", price: "₹599" },
+            "beta-extreme": { prefix: "Starts at", price: "₹999" },
+            "beta-Premium": { prefix: "Starts at", price: "₹399" }
         };
         var priceKey = getPlanId() + "-" + requiredPlan;
-        if (priceEl) priceEl.textContent = pricing[priceKey] || "";
+        var pData = pricing[priceKey] || { prefix: "Upgrade for just", price: "" };
+        
+        if (prefixEl) prefixEl.textContent = pData.prefix;
+        if (priceEl) priceEl.textContent = pData.price;
+
+        // Update checkout URL with identity and fix CEP navigation
+        var upgradeBtn = modal.querySelector(".upgrade-btn");
+        if (upgradeBtn) {
+            upgradeBtn.onclick = function(e) {
+                e.preventDefault();
+                var email = localStorage.getItem("captiongrit_email") || "";
+                var key = localStorage.getItem("captiongrit_key") || "";
+                var url = "https://www.flogrit.com/captiongrit" + (email && key ? "?email=" + encodeURIComponent(email) + "&key=" + encodeURIComponent(key) : "") + "#pricing";
+                if (window.cep && window.cep.util) {
+                    window.cep.util.openURLInDefaultBrowser(url);
+                } else {
+                    window.open(url, "_blank");
+                }
+            };
+        }
 
         modal.style.display = "flex";
     }
@@ -572,6 +892,29 @@
         } else {
             console.log("ERROR: btn-read-clip not found in DOM!");
         }
+
+        // Bind change events for smart defaults
+        ['source-lang', 'translate-lang', 'stt-provider', 'ai-provider', 'verification-toggle'].forEach(function (id) {
+            var el = document.getElementById(id);
+            if (el) {
+                el.addEventListener('change', function () {
+                    saveGenerationSettings();
+                    updateDynamicHint();
+                });
+            }
+        });
+
+        // Help Video Link
+        var linkHelpApi = document.getElementById("link-help-api");
+        if (linkHelpApi) {
+            linkHelpApi.addEventListener("click", function (e) {
+                e.preventDefault();
+                if (window.cep && window.cep.util) {
+                    window.cep.util.openURLInDefaultBrowser("https://youtu.be/bnJ-pPlMwEg");
+                }
+            });
+        }
+
         document.getElementById("btn-generate").addEventListener("click", generateCaptions);
         document.getElementById("btn-save-keys").addEventListener("click", function () {
             saveApiKeys();
@@ -605,7 +948,7 @@
 
         var btnBrowseFFmpeg = document.getElementById("btn-browse-ffmpeg");
         if (btnBrowseFFmpeg) {
-            btnBrowseFFmpeg.addEventListener("click", function() {
+            btnBrowseFFmpeg.addEventListener("click", function () {
                 if (window.cep && window.cep.fs) {
                     var result = window.cep.fs.showOpenDialog(false, false, "Select FFmpeg executable", null, null);
                     if (result.err === 0 && result.data && result.data.length > 0) {
@@ -619,7 +962,7 @@
 
         var btnCopyDiag = document.getElementById("btn-copy-diagnostics");
         if (btnCopyDiag) {
-            btnCopyDiag.addEventListener("click", function() {
+            btnCopyDiag.addEventListener("click", function () {
                 var diagStr = _ffmpegDiagnostics.join("\n");
                 var temp = document.createElement("textarea");
                 temp.value = diagStr;
@@ -628,7 +971,7 @@
                 document.execCommand("copy");
                 document.body.removeChild(temp);
                 btnCopyDiag.textContent = "Copied!";
-                setTimeout(function() { btnCopyDiag.textContent = "Copy Diagnostics to Clipboard"; }, 2000);
+                setTimeout(function () { btnCopyDiag.textContent = "Copy Diagnostics to Clipboard"; }, 2000);
             });
         }
 
@@ -647,6 +990,18 @@
         // Upgrade modal close
         var btnCloseUpgrade = document.getElementById("btn-close-upgrade");
         if (btnCloseUpgrade) btnCloseUpgrade.addEventListener("click", hideUpgradeModal);
+
+        // Beta CTA Click Listener
+        var betaUpgradeBtn = document.getElementById("beta-upgrade-btn");
+        if (betaUpgradeBtn) {
+            betaUpgradeBtn.addEventListener("click", function () {
+                if (getPlanId() === "beta") {
+                    showUpgradeModal("Premium", "Choose between the Basic and Pro plans to unlock full features and remove Beta limits.");
+                }
+            });
+        }
+
+
     }
 
     // ------------------------------------------
@@ -668,7 +1023,7 @@
                 try {
                     console.log("The callback executed");
                     console.log("Raw result:", result);
-                    
+
                     if (result === "EvalScript error.") {
                         hideProgress();
                         showStatus("error", "Internal error: Host script failed to evaluate. Please restart Premiere Pro or After Effects.");
@@ -826,6 +1181,13 @@
 
     // ------------------------------------------
     // Generate Captions \u2014 Main Pipeline
+    // --------------------------------------    // --- BATCH SESSION STATE ---
+    var BatchSession = null;
+    var MAX_STT_WORKERS = 3;
+    var MAX_AI_WORKERS = 1;
+
+    // ------------------------------------------
+    // Generate Captions — Main Pipeline (Phase 4 Refactor)
     // ------------------------------------------
     async function generateCaptions() {
         hideStatus();
@@ -840,20 +1202,6 @@
         var captionStyle = getSelectedPills("caption-style")[0] || "single_line";
         var translateEnabled = document.getElementById("translate-toggle").checked;
         var translateLang = document.getElementById("translate-lang").value;
-        var verifyEnabled = document.getElementById("verification-toggle") ? document.getElementById("verification-toggle").checked : false;
-
-        var passes = 0;
-        if (getPlanId() !== "basic") {
-            var captionStyleEl = document.querySelector('#caption-style .pill.active');
-            var isWBW = captionStyleEl && captionStyleEl.getAttribute('data-style') === 'word_by_word';
-
-            if (isWBW) {
-                passes = 4; // Max depth. Pipeline handles early exit by tier.
-            } else {
-                var verifyEnabled = document.getElementById("verification-toggle") ? document.getElementById("verification-toggle").checked : false;
-                passes = verifyEnabled ? 4 : 0;
-            }
-        }
 
         // Validation
         if (sourceLang === "auto" && (captionLangs.includes("phonetic") || captionLangs.includes("native_script"))) {
@@ -913,15 +1261,11 @@
 
         // -- Tier enforcement: clip count (batch) --
         if (currentClips.length > TIER.maxClips) {
-            showStatus("error", "You selected " + currentClips.length + " clips \u2014 " + PLAN_LABELS[getPlanId()] + " plan supports " + TIER.maxClips + " clip at a time. Upgrade to Extreme for batch processing.");
+            showStatus("error", "You selected " + currentClips.length + " clips — " + PLAN_LABELS[getPlanId()] + " plan supports " + TIER.maxClips + " clip at a time. Upgrade to Extreme for batch processing.");
             showUpgradeModal("extreme", "Process up to 99 clips at once with Extreme.");
             return;
         }
 
-        // -- Tier enforcement: gated features safety net --
-        if (verifyEnabled && !TIER.hasDoubleCheck) {
-            verifyEnabled = false; // Silently disable if somehow toggled
-        }
         if (captionStyle === "word_by_word" && !TIER.hasWordByWord) {
             showStatus("error", "Word-by-Word captions require the Pro plan.");
             showUpgradeModal("pro", "Word-by-Word captions, 98% accuracy with Double-Check, and more.");
@@ -936,337 +1280,164 @@
         showProgress();
 
         try {
-            var allProcessedSegments = [];
-            var verifyWarning = null;
-            var _verificationReport = null;
+            // Initialize BatchSession
+            BatchSession = {
+                sttProvider: sttProvider,
+                sourceLang: sourceLang,
+                captionLangs: captionLangs,
+                outputOptions: outputOptions,
+                aiProvider: aiProvider,
+                captionStyle: captionStyle,
+                translateEnabled: translateEnabled,
+                translateLang: translateLang,
+                sttKey: sttKey,
+                tempDir: await evalScriptAsync("getTempDir()"),
+                clips: currentClips.map(function (c) { return Object.assign({}, c); }),
+                chunkQueue: [],
+                aiQueue: [],
+                transcripts: {},
+                completedClips: [],
+                failedClips: [],
+                editorQueue: [],
+                chunkingComplete: false,
+                isEditorOpen: false
+            };
 
-            for (var clipIdx = 0; clipIdx < currentClips.length; clipIdx++) {
-                var currentClip = currentClips[clipIdx];
-                var clipLabel = currentClips.length > 1 ? " (Clip " + (clipIdx + 1) + "/" + currentClips.length + ")" : "";
-                var baseProgress = (clipIdx / currentClips.length) * 100;
-                var pScale = 1 / currentClips.length;
+            // Phase 1: Parallel Audio Extraction
+            setProgressStep("Extracting audio for all clips...");
+            setProgressBar(5);
 
-                if (cancelled) throw new Error("Cancelled");
-                setProgressStep("Extracting audio" + clipLabel + "...");
-                setProgressBar(baseProgress + 10 * pScale);
-
-                var tempDir = await evalScriptAsync("getTempDir()");
-                var audioPath = tempDir.replace(/\\/g, "/") + "/captiongrit_audio_" + clipIdx + ".mp3";
-
-                var extractResult = await extractAudioNode(currentClip.file, audioPath, currentClip.inPoint, currentClip.duration);
-                if (!extractResult.success) {
-                    if (extractResult.error && extractResult.error.indexOf("ffmpeg") !== -1) {
-                        var hostApp = "the application";
-                        if (typeof csInterface !== "undefined") {
-                            var appCode = csInterface.getHostEnvironment().appName;
-                            if (appCode === "PPRO") hostApp = "Premiere Pro";
-                            else if (appCode === "AEFT") hostApp = "After Effects";
-                        }
-                        if (process.platform === 'darwin') {
-                            throw new Error("FFmpeg execution failed. Please restart " + hostApp + " and try again. Details: " + extractResult.error);
-                        }
-                        throw new Error("FFmpeg execution failed. Details: " + extractResult.error);
+            var extractionPromises = BatchSession.clips.map(function (clip, idx) {
+                return (async function () {
+                    try {
+                        var audioPath = BatchSession.tempDir.replace(/\\/g, "/") + "/captiongrit_audio_" + idx + ".mp3";
+                        clip.audioPath = audioPath;
+                        var extractResult = await extractAudioNode(clip.file, audioPath, clip.inPoint, clip.duration);
+                        if (!extractResult.success) throw new Error(extractResult.error);
+                    } catch (err) {
+                        console.error("[Captiongrit] Audio extraction failed for clip " + idx, err);
+                        BatchSession.failedClips.push(idx);
                     }
-                    throw new Error("Audio extraction failed" + clipLabel + ": " + extractResult.error);
-                }
+                })();
+            });
+            await Promise.all(extractionPromises);
 
-                setProgressBar(baseProgress + 25 * pScale);
+            if (cancelled) throw new Error("Cancelled");
 
-                // -- Step 2: Read Audio as Base64 --
-                if (cancelled) throw new Error("Cancelled");
-                setProgressStep("Reading audio file" + clipLabel + "...");
+            // Phase 2: Global Chunk Queue & Audio Reading
+            setProgressStep("Preparing global chunk queue...");
+            setProgressBar(15);
+            var CHUNK_SECONDS = 25;
 
-                var audioBase64;
-                if (fs) {
-                    // Use lightning-fast Node.js file system read
-                    audioBase64 = fs.readFileSync(audioPath, { encoding: "base64" });
-                } else {
-                    // Fallback to slow ExtendScript method if Node isn't available
-                    audioBase64 = await evalScriptAsync('readFileAsBase64("' + escapeJSX(audioPath) + '")');
-                    if (audioBase64.charAt(0) === "{") {
-                        var readErr = JSON.parse(audioBase64);
-                        if (readErr.error) throw new Error(readErr.error);
-                    }
-                }
+            for (var i = 0; i < BatchSession.clips.length; i++) {
+                if (BatchSession.failedClips.includes(i)) continue;
+                var clip = BatchSession.clips[i];
 
-                // -- Step 3: Run STT --
-                if (cancelled) throw new Error("Cancelled");
-                var providerName = sttProvider === "elevenlabs" ? "ElevenLabs Scribe" : "Deepgram Nova-2";
-                setProgressStep("Transcribing with " + providerName + "...");
+                if (clip.duration > CHUNK_SECONDS) {
+                    var numChunks = Math.ceil(clip.duration / CHUNK_SECONDS);
+                    for (var c = 0; c < numChunks; c++) {
+                        var chunkStart = c * CHUNK_SECONDS;
+                        var chunkLen = Math.min(CHUNK_SECONDS, clip.duration - chunkStart);
+                        var chunkPath = BatchSession.tempDir.replace(/\\/g, "/") + "/captiongrit_chunk_" + i + "_" + c + ".mp3";
 
-                var segments;
-                var CHUNK_SECONDS = 25; // ElevenLabs free tier truncates at ~30s, stay safely under
+                        var chunkArgs = ['-ss', String(chunkStart), '-t', String(chunkLen), '-i', clip.audioPath, '-ar', '16000', '-ac', '1', '-b:a', '64k', '-y', chunkPath];
+                        var execOptsChunk = getMacExecOpts({ maxBuffer: 1024 * 1024 * 10 });
 
-                try {
-                    if (currentClip.duration > CHUNK_SECONDS) {
-                        // -- Chunked STT for long clips (parallel processing) --
-                        var allWords = [];
-                        var numChunks = Math.ceil(currentClip.duration / CHUNK_SECONDS);
-                        console.log("[Captiongrit] Audio is " + currentClip.duration.toFixed(1) + "s \u2014 splitting into " + numChunks + " chunks of " + CHUNK_SECONDS + "s");
-
-                        setProgressStep("Extracting " + numChunks + " audio chunks...");
-
-                        // Phase 1: Extract all chunks in parallel (ffmpeg is CPU-bound, fast)
-                        var chunkInfos = [];
-                        var chunkExtractionPromises = [];
-                        for (var c = 0; c < numChunks; c++) {
-                            var chunkStart = c * CHUNK_SECONDS;
-                            var chunkLen = Math.min(CHUNK_SECONDS, currentClip.duration - chunkStart);
-                            var chunkPath = tempDir.replace(/\\/g, "/") + "/captiongrit_chunk_" + c + ".mp3";
-                            chunkInfos.push({ index: c, start: chunkStart, length: chunkLen, path: chunkPath });
-
-                            var chunkArgs = ['-ss', String(chunkStart), '-t', String(chunkLen), '-i', audioPath, '-ar', '16000', '-ac', '1', '-b:a', '64k', '-y', chunkPath];
-                            var execOptsChunk = getMacExecOpts({ maxBuffer: 1024 * 1024 * 10 });
-                            chunkExtractionPromises.push(new Promise(function (res) {
-                                cp.execFile(getFFmpegPath(), chunkArgs, execOptsChunk, function (err) {
-                                    if (err) res({ success: false, error: err.message });
-                                    else res({ success: true });
-                                });
-                            }));
-                        }
-                        var extractResults = await Promise.all(chunkExtractionPromises);
-
-                        if (cancelled) throw new Error("Cancelled");
-
-                        // Phase 2: Read chunk files and prepare blobs
-                        var chunkBlobs = [];
-                        for (var c = 0; c < numChunks; c++) {
-                            if (!extractResults[c].success) {
-                                console.warn("[Captiongrit] Chunk " + c + " extraction failed:", extractResults[c].error);
-                                chunkBlobs.push(null);
-                                continue;
-                            }
-                            var chunkBase64;
-                            if (fs) {
-                                chunkBase64 = fs.readFileSync(chunkInfos[c].path, { encoding: "base64" });
-                            } else {
-                                chunkBase64 = await evalScriptAsync('readFileAsBase64("' + escapeJSX(chunkInfos[c].path) + '")');
-                            }
-                            var chunkBinary = atob(chunkBase64);
-                            var chunkBytes = new Uint8Array(chunkBinary.length);
-                            for (var b = 0; b < chunkBinary.length; b++) {
-                                chunkBytes[b] = chunkBinary.charCodeAt(b);
-                            }
-                            chunkBlobs.push(new Blob([chunkBytes], { type: "audio/mpeg" }));
-                        }
-
-                        // Phase 3: Run STT on all chunks in parallel (max concurrency 3)
-                        setProgressStep("Transcribing " + numChunks + " chunks in parallel with " + providerName + "...");
-                        var CONCURRENCY = 3;
-                        var sttResults = new Array(numChunks);
-                        for (var batch = 0; batch < numChunks; batch += CONCURRENCY) {
-                            if (cancelled) throw new Error("Cancelled");
-                            var batchPromises = [];
-                            var batchIndices = [];
-                            for (var bi = batch; bi < Math.min(batch + CONCURRENCY, numChunks); bi++) {
-                                if (!chunkBlobs[bi]) {
-                                    sttResults[bi] = [];
-                                    continue;
+                        var result = await new Promise(function (res) {
+                            cp.execFile(getFFmpegPath(), chunkArgs, execOptsChunk, function (err, stdout, stderr) {
+                                if (err) {
+                                    console.error("[Captiongrit] FFmpeg chunking error:", err.message || stderr);
+                                    res({ success: false, error: err.message || stderr });
+                                } else {
+                                    res({ success: true });
                                 }
-                                batchIndices.push(bi);
-                                var sttFn = sttProvider === "elevenlabs" ? sttElevenLabs : sttDeepgram;
-                                batchPromises.push(sttFn(chunkBlobs[bi], sttKey, sourceLang));
-                            }
-                            var batchResults = await Promise.all(batchPromises);
-                            for (var ri = 0; ri < batchResults.length; ri++) {
-                                sttResults[batchIndices[ri]] = batchResults[ri];
-                            }
-                            setProgressBar(baseProgress + (25 + Math.round(25 * Math.min(batch + CONCURRENCY, numChunks) / numChunks)) * pScale);
-                        }
-
-                        // Phase 4: Merge results with timestamp offsets
-                        for (var c = 0; c < numChunks; c++) {
-                            var chunkWords = sttResults[c] || [];
-                            var chunkOffset = chunkInfos[c].start;
-                            console.log("[Captiongrit] Chunk " + c + ": " + chunkWords.length + " words (offset +" + chunkOffset + "s)");
-                            for (var w = 0; w < chunkWords.length; w++) {
-                                chunkWords[w].start += chunkOffset;
-                                chunkWords[w].end += chunkOffset;
-                            }
-                            allWords = allWords.concat(chunkWords);
-                        }
-
-                        // Filter empty words
-                        allWords = allWords.filter(function (w) {
-                            return w.word && w.word.trim().length > 0;
+                            });
                         });
 
-                        console.log("[Captiongrit] Total words after chunking: " + allWords.length);
-                        if (allWords.length > 0) {
-                            var lastW = allWords[allWords.length - 1];
-                            console.log("[Captiongrit] Last word: '" + lastW.word + "' ends at " + lastW.end + "s");
+                        if (!result.success) {
+                            throw new Error("FFmpeg failed to extract audio chunk " + c + ". This may happen if the file is locked or corrupt. Details: " + result.error);
                         }
 
-                        // Clean and correct before grouping
-                        allWords = cleanRawSTTSegments(allWords);
-                        allWords = applyPhoneticCorrections(allWords);
-
-                        segments = groupWordsIntoSegments(allWords, captionStyle);
-                    } else {
-                        // -- Single STT call for short clips --
-                        segments = await runSTT(audioBase64, sttProvider, sourceLang, sttKey, captionStyle);
-                    }
-                } catch (sttErr) {
-                    if (sttErr.message && sttErr.message.indexOf("Failed to fetch") !== -1) {
-                        throw new Error("Network error calling " + providerName + " API. This usually means the CEP panel cannot make HTTPS requests. Fix: 1) Run install.bat again  2) Fully close and reopen " + (csInterface ? csInterface.getHostEnvironment().appName : "Adobe app"));
-                    }
-                    throw new Error("STT (" + providerName + ") error: " + sttErr.message);
-                }
-                setProgressBar(baseProgress + 50 * pScale);
-
-                if (!segments || segments.length === 0) {
-                    throw new Error("No speech detected in the audio" + clipLabel + ". Check the clip and try again.");
-                }
-                // -- Step 4: Convert Script --
-                if (cancelled) throw new Error("Cancelled");
-
-                // Add delay for batch clips to avoid AI rate limits (which cause silent phonetic fallback failures)
-                if (clipIdx > 0) {
-                    setProgressStep("Waiting 2s to avoid AI rate limits...");
-                    await new Promise(function (resolve) { setTimeout(resolve, 2000); });
-                }
-
-                var displayNames = captionLangs.map(function (l) {
-                    return l === "native_script" ? "Native Script" : l === "phonetic" ? "Roman" : "English";
-                });
-                setProgressStep("Converting to " + displayNames.join(", ") + clipLabel + "...");
-
-                try {
-                    segments = await convertScript(segments, captionLangs, aiProvider, sourceLang, captionStyle);
-                } catch (aiErr) {
-                    if (aiErr.message && aiErr.message.indexOf("Failed to fetch") !== -1) {
-                        throw new Error("Network error calling AI provider. Check internet and API key. If persistent, restart Adobe after running install.bat.");
-                    }
-                    throw new Error("AI conversion error: " + aiErr.message);
-                }
-                setProgressBar(baseProgress + 70 * pScale);
-
-                // -- Step 4.5: Verification Pass (if enabled) --
-                if (passes > 0 && !cancelled) {
-                    setProgressStep(`Enhancing accuracy with multi-pass engine for ${clipLabel}...`);
-                    var captionStyleForReport = (document.querySelector('#caption-style .pill.active') || {});
-                    var isWBWForReport = captionStyleForReport.getAttribute && captionStyleForReport.getAttribute('data-style') === 'word_by_word';
-                    _verificationReport = {
-                        provider: aiProvider,
-                        model: null,
-                        tier: getPlanId(),
-                        verificationEnabled: true,
-                        wordByWord: isWBWForReport,
-                        requestedPasses: passes,
-                        completedPasses: 0,
-                        retryCount: 0,
-                        startedAt: new Date().toISOString(),
-                        finishedAt: null,
-                        elapsedMs: 0,
-                        lastErrorType: null,
-                        lastErrorMessage: null
-                    };
-                    var verifyStartTime = Date.now();
-                    try {
-                        segments = await runVerificationPipeline(segments, aiProvider, captionLangs[0], sourceLang, passes);
-                        _verificationReport.completedPasses = passes;
-                        _verificationReport.elapsedMs = Date.now() - verifyStartTime;
-                        _verificationReport.finishedAt = new Date().toISOString();
-                    } catch (verifyErr) {
-                        var errorType = classifyVerificationError(verifyErr);
-                        var isTransient = (errorType === 'network' || errorType === 'rate_limit' || errorType === 'server_error');
-                        console.error('[Captiongrit] Verification Failure', JSON.stringify({
-                            provider: aiProvider,
-                            pass: 'pipeline',
-                            clip: clipLabel || 'single',
-                            duration: currentClip.duration,
-                            errorType: errorType,
-                            message: verifyErr.message,
-                            retry: isTransient,
-                            stack: verifyErr.stack || ''
-                        }, null, 2));
-
-                        if (isTransient) {
-                            // Retry once for transient errors with error-specific delay
-                            var retryDelay = getRetryDelay(errorType);
-                            _verificationReport.retryCount = 1;
-                            try {
-                                console.log('[Captiongrit] Retrying verification (transient ' + errorType + ', delay ' + retryDelay + 'ms)...');
-                                setProgressStep('Retrying Double-Check' + clipLabel + '...');
-                                if (retryDelay > 0) {
-                                    await new Promise(function(r) { setTimeout(r, retryDelay); });
-                                }
-                                segments = await runVerificationPipeline(segments, aiProvider, captionLangs[0], sourceLang, passes);
-                                _verificationReport.completedPasses = passes;
-                                _verificationReport.elapsedMs = Date.now() - verifyStartTime;
-                                _verificationReport.finishedAt = new Date().toISOString();
-                            } catch (retryErr) {
-                                var retryErrorType = classifyVerificationError(retryErr);
-                                console.error('[Captiongrit] Verification retry also failed (' + retryErrorType + '):', retryErr.message);
-                                _verificationReport.lastErrorType = retryErrorType;
-                                _verificationReport.lastErrorMessage = retryErr.message;
-                                _verificationReport.elapsedMs = Date.now() - verifyStartTime;
-                                _verificationReport.finishedAt = new Date().toISOString();
-                                var reasonLabel = retryErrorType === 'rate_limit' ? 'AI rate limit exceeded' :
-                                    retryErrorType === 'network' ? 'Network connection failed' :
-                                    retryErrorType === 'server_error' ? 'AI provider server error' : retryErr.message;
-                                verifyWarning = '\u26A0 Double-Check could not complete. Base captions generated successfully, but not enhanced. Reason: ' + reasonLabel;
-                            }
+                        var chunkBase64;
+                        if (fs) {
+                            chunkBase64 = fs.readFileSync(chunkPath, { encoding: "base64" });
                         } else {
-                            // Non-transient error — don't retry
-                            _verificationReport.lastErrorType = errorType;
-                            _verificationReport.lastErrorMessage = verifyErr.message;
-                            _verificationReport.elapsedMs = Date.now() - verifyStartTime;
-                            _verificationReport.finishedAt = new Date().toISOString();
-                            var reasonLabel2 = errorType === 'parse_error' ? 'AI response parsing failed' : verifyErr.message;
-                            verifyWarning = '\u26A0 Double-Check could not complete. Base captions generated successfully, but not enhanced. Reason: ' + reasonLabel2;
+                            chunkBase64 = await evalScriptAsync('readFileAsBase64("' + escapeJSX(chunkPath) + '")');
                         }
+                        var chunkBinary = atob(chunkBase64);
+                        var chunkBytes = new Uint8Array(chunkBinary.length);
+                        for (var b = 0; b < chunkBinary.length; b++) chunkBytes[b] = chunkBinary.charCodeAt(b);
+                        var blob = new Blob([chunkBytes], { type: "audio/mpeg" });
+
+                        BatchSession.chunkQueue.push({
+                            clipIdx: i,
+                            chunkIndex: c,
+                            startOffset: chunkStart,
+                            blob: blob,
+                            path: chunkPath
+                        });
                     }
-                    // Expose report globally for customer diagnostics
-                    if (typeof window !== 'undefined') {
-                        window.__captiongritLastVerification = _verificationReport;
-                    }
-                    setProgressBar(baseProgress + 75 * pScale);
-                }
-
-                // Show preview of first 3
-                segments.slice(0, 3).forEach(function (seg) {
-                    addCaptionPreview(seg);
-                });
-
-                // -- Step 5: Translate (if enabled) --
-                if (translateEnabled && !cancelled) {
-                    if (clipIdx > 0) await new Promise(function (resolve) { setTimeout(resolve, 1500); });
-                    setProgressStep("Translating to " + translateLang + clipLabel + "...");
-                    segments = await translateCaptions(segments, translateLang, aiProvider, sourceLang, captionLangs[0], captionStyle);
-                    setProgressBar(baseProgress + 80 * pScale);
-                }
-
-                // Determine display_text for each segment
-                var primaryLang = captionLangs[0];
-                var primaryKey = langToKey(primaryLang, sourceLang);
-                segments.forEach(function (seg) {
-                    if (translateEnabled && !cancelled && seg.translated) {
-                        seg.display_text = seg.translated;
-                    } else if (seg._verified) {
-                        // Verification already set display_text \u2014 preserve it (even if empty for music tags)
-                        seg.display_text = seg[primaryKey] !== undefined ? seg[primaryKey] : seg.original;
+                    clip.totalChunks = numChunks;
+                    clip.completedChunks = 0;
+                    clip.sttResults = new Array(numChunks);
+                } else {
+                    var audioBase64;
+                    if (fs) {
+                        audioBase64 = fs.readFileSync(clip.audioPath, { encoding: "base64" });
                     } else {
-                        seg.display_text = seg[primaryKey] || seg.original;
+                        audioBase64 = await evalScriptAsync('readFileAsBase64("' + escapeJSX(clip.audioPath) + '")');
                     }
-                    allProcessedSegments.push(seg);
-                });
+                    var chunkBinary = atob(audioBase64);
+                    var chunkBytes = new Uint8Array(chunkBinary.length);
+                    for (var b = 0; b < chunkBinary.length; b++) chunkBytes[b] = chunkBinary.charCodeAt(b);
+                    var blob = new Blob([chunkBytes], { type: "audio/mpeg" });
 
-            } // End of batch loop
+                    BatchSession.chunkQueue.push({
+                        clipIdx: i,
+                        chunkIndex: 0,
+                        startOffset: 0,
+                        blob: blob,
+                        path: clip.audioPath
+                    });
+                    clip.totalChunks = 1;
+                    clip.completedChunks = 0;
+                    clip.sttResults = new Array(1);
+                }
+            }
+            BatchSession.chunkingComplete = true;
 
-            // -- Ready for Review --
-            setProgressBar(100);
-            setProgressStep("Ready for review...");
-            setTimeout(function () {
-                showEditorPanel(allProcessedSegments, outputOptions);
-                if (verifyWarning) {
-                    showStatus('warning', verifyWarning);
+            if (cancelled) throw new Error("Cancelled");
+
+            // Phase 3, 4 & 5: Streaming Pipeline
+            updateProgressText();
+
+            // Start STT Workers
+            var workers = [];
+            for (var w = 0; w < MAX_STT_WORKERS; w++) {
+                workers.push(sttWorkerLoop(w));
+            }
+            var sttPromise = Promise.all(workers);
+
+            // Start AI Workers
+            var aiWorkers = [];
+            for (var a = 0; a < MAX_AI_WORKERS; a++) {
+                aiWorkers.push(aiWorkerLoop(a));
+            }
+            var aiPromise = Promise.all(aiWorkers);
+
+            // Wait for both pipelines to finish
+            await Promise.all([sttPromise, aiPromise]);
+
+            if (cancelled) throw new Error("Cancelled");
+
+            // If background workers finished without opening editor (all failed, or fast), finish.
+            if (BatchSession && !BatchSession.isEditorOpen && BatchSession.editorQueue.length === 0) {
+                if (BatchSession.completedClips.length > 0 || BatchSession.failedClips.length > 0) {
+                    finishBatch();
+                } else {
+                    throw new Error("All clips failed processing.");
                 }
-                // Attach verification report to segments for diagnostics
-                if (_verificationReport) {
-                    console.log('[Captiongrit] Verification Report', JSON.stringify(_verificationReport, null, 2));
-                }
-            }, 500);
+            }
 
         } catch (err) {
             hideProgress();
@@ -1276,8 +1447,189 @@
             } else {
                 showStatus("error", err.message);
             }
+            cancelled = true; // Signal workers to stop before cleanup
+            cleanupBatchSession();
         }
     }
+
+    async function sttWorkerLoop(workerId) {
+        while (true) {
+            if (!BatchSession || cancelled) break;
+            if (BatchSession.chunkQueue.length === 0 && BatchSession.chunkingComplete) break;
+            if (BatchSession.chunkQueue.length === 0) {
+                await new Promise(function (r) { setTimeout(r, 100); });
+                continue;
+            }
+            if (!BatchSession) break;
+            var chunk = BatchSession.chunkQueue.shift();
+            if (!BatchSession) break;
+            if (BatchSession.failedClips.includes(chunk.clipIdx)) continue;
+
+            try {
+                var sttFn = BatchSession.sttProvider === "elevenlabs" ? sttElevenLabs : sttDeepgram;
+                var result = await sttFn(chunk.blob, BatchSession.sttKey, BatchSession.sourceLang);
+                if (!BatchSession || cancelled) break;
+
+                var clip = BatchSession.clips[chunk.clipIdx];
+                clip.sttResults[chunk.chunkIndex] = result;
+                clip.completedChunks++;
+
+                updateProgressText();
+
+                if (clip.completedChunks === clip.totalChunks) {
+                    assembleTranscript(chunk.clipIdx);
+                }
+            } catch (err) {
+                console.error("[Captiongrit] STT Worker Error:", err);
+                if (!BatchSession || cancelled) break;
+                chunk.retries = (chunk.retries || 0) + 1;
+                if (chunk.retries < 3) {
+                    await new Promise(function (r) { setTimeout(r, 500); });
+                    if (BatchSession) BatchSession.chunkQueue.unshift(chunk);
+                } else {
+                    if (BatchSession && !BatchSession.failedClips.includes(chunk.clipIdx)) {
+                        BatchSession.failedClips.push(chunk.clipIdx);
+                        checkCompletion();
+                    }
+                }
+            }
+        }
+    }
+
+    function assembleTranscript(clipIdx) {
+        var clip = BatchSession.clips[clipIdx];
+        var allWords = [];
+        for (var c = 0; c < clip.totalChunks; c++) {
+            var chunkWords = clip.sttResults[c] || [];
+            var chunkOffset = c * 25; // using identical CHUNK_SECONDS logic
+            for (var w = 0; w < chunkWords.length; w++) {
+                chunkWords[w].start += chunkOffset;
+                chunkWords[w].end += chunkOffset;
+            }
+            allWords = allWords.concat(chunkWords);
+        }
+
+        allWords = allWords.filter(function (w) { return w.word && w.word.trim().length > 0; });
+        allWords = cleanRawSTTSegments(allWords);
+        allWords = applyPhoneticCorrections(allWords);
+
+        var segments = groupWordsIntoSegments(allWords, BatchSession.captionStyle);
+        BatchSession.aiQueue.push({ clipIdx: clipIdx, segments: segments });
+    }
+
+    async function aiWorkerLoop(workerId) {
+        var totalValidClips = BatchSession ? BatchSession.clips.length : 0;
+
+        while (true) {
+            if (!BatchSession || cancelled) break;
+
+            var totalProcessed = BatchSession.completedClips.length + BatchSession.failedClips.length;
+            if (totalProcessed >= totalValidClips && BatchSession.aiQueue.length === 0) break;
+
+            if (BatchSession.aiQueue.length === 0) {
+                await new Promise(function (r) { setTimeout(r, 200); });
+                continue;
+            }
+
+            if (!BatchSession) break;
+            var task = BatchSession.aiQueue.shift();
+            if (!BatchSession) break;
+            if (BatchSession.failedClips.includes(task.clipIdx)) continue;
+
+            try {
+                var segments = task.segments;
+
+                if (BatchSession.completedClips.length > 0) {
+                    await new Promise(function (r) { setTimeout(r, 2000); });
+                }
+
+                if (!BatchSession || cancelled) break;
+
+                segments = await convertScript(segments, BatchSession.captionLangs, BatchSession.aiProvider, BatchSession.sourceLang, BatchSession.captionStyle);
+
+                if (!BatchSession || cancelled) break;
+
+                if (BatchSession.translateEnabled) {
+                    await new Promise(function (r) { setTimeout(r, 1500); });
+                    if (!BatchSession || cancelled) break;
+                    segments = await translateCaptions(segments, BatchSession.translateLang, BatchSession.aiProvider, BatchSession.sourceLang, BatchSession.captionLangs[0], BatchSession.captionStyle);
+                    if (!BatchSession || cancelled) break;
+                }
+
+                var primaryLang = BatchSession.captionLangs[0];
+                var primaryKey = langToKey(primaryLang, BatchSession.sourceLang);
+                var timelineOffset = BatchSession.clips[task.clipIdx].timelineStart || 0;
+
+                var finalSegments = [];
+                segments.forEach(function (seg) {
+                    if (BatchSession.translateEnabled && seg.translated) {
+                        seg.display_text = seg.translated;
+                    } else {
+                        seg.display_text = seg[primaryKey] || seg.original;
+                    }
+                    var adjustedSeg = Object.assign({}, seg);
+                    adjustedSeg.start += timelineOffset;
+                    adjustedSeg.end += timelineOffset;
+                    finalSegments.push(adjustedSeg);
+                });
+
+                BatchSession.transcripts[task.clipIdx] = finalSegments;
+                BatchSession.completedClips.push(task.clipIdx);
+                BatchSession.editorQueue.push(task.clipIdx);
+
+                updateProgressText();
+                tryOpenEditor();
+            } catch (err) {
+                console.error("[Captiongrit] AI Error:", err);
+                task.retries = (task.retries || 0) + 1;
+                if (task.retries < 3) {
+                    await new Promise(function (r) { setTimeout(r, 1000); });
+                    if (BatchSession) BatchSession.aiQueue.unshift(task);
+                } else {
+                    if (BatchSession && !BatchSession.failedClips.includes(task.clipIdx)) {
+                        BatchSession.failedClips.push(task.clipIdx);
+                        checkCompletion();
+                    }
+                }
+            }
+        }
+    }
+
+    function updateProgressText() {
+        if (!BatchSession) return;
+
+        var sttCompleted = 0;
+        var sttTotal = 0;
+        BatchSession.clips.forEach(function (c, idx) {
+            if (!BatchSession.failedClips.includes(idx)) {
+                sttCompleted += (c.completedChunks || 0);
+                sttTotal += (c.totalChunks || 0);
+            }
+        });
+
+        var aiCompleted = BatchSession.completedClips.length;
+        var validClips = BatchSession.clips.length - BatchSession.failedClips.length;
+
+        if (sttCompleted < sttTotal) {
+            setProgressStep("Transcribing (" + sttCompleted + " / " + sttTotal + " Chunks)");
+            setProgressBar(20 + (sttCompleted / Math.max(1, sttTotal)) * 40);
+        } else if (aiCompleted < validClips) {
+            setProgressStep("AI Conversion (" + aiCompleted + " / " + validClips + " Videos)");
+            setProgressBar(60 + (aiCompleted / Math.max(1, validClips)) * 35);
+        } else if (!BatchSession.isEditorOpen) {
+            setProgressStep("Preparing Editor...");
+            setProgressBar(100);
+        }
+    }
+
+    function checkCompletion() {
+        if (!BatchSession) return;
+        var totalProcessed = BatchSession.completedClips.length + BatchSession.failedClips.length;
+        if (totalProcessed >= BatchSession.clips.length && !BatchSession.isEditorOpen && BatchSession.editorQueue.length === 0) {
+            finishBatch();
+        }
+    }
+
 
     // ------------------------------------------
     // Caption Editor
@@ -1319,7 +1671,60 @@
             if (editorPanel2) editorPanel2.classList.remove("editor-readonly");
         }
 
+        // Apply tier gating for AI Improve button
+        var btnAIImprove = document.getElementById("btn-editor-ai-improve");
+        if (btnAIImprove) {
+            if (!TIER.hasDoubleCheck) {
+                btnAIImprove.classList.add("locked");
+                btnAIImprove.onclick = function (e) {
+                    e.preventDefault();
+                    showUpgradeModal("pro", "AI Improve uses advanced language models to fix spelling, punctuation, and native script automatically.");
+                };
+            } else {
+                btnAIImprove.classList.remove("locked");
+                btnAIImprove.onclick = handleEditorAIVerify;
+            }
+        }
+
         renderEditorTable();
+    }
+
+    async function handleEditorAIVerify() {
+        if (!editorSegments || editorSegments.length === 0) return;
+        var btn = document.getElementById("btn-editor-ai-improve");
+        if (btn.disabled) return;
+
+        var aiProvider = document.getElementById("ai-provider").value;
+        var captionLangs = getSelectedPills("caption-langs");
+        var sourceLang = document.getElementById("source-lang").value;
+        var primaryLang = captionLangs[0];
+
+        var originalText = btn.innerHTML;
+        btn.innerHTML = "<div class='spinner' style='width:12px;height:12px;display:inline-block;margin-right:6px;'></div> Improving...";
+        btn.disabled = true;
+
+        try {
+            // Standard verification pipeline expects passes = 4 for full pipeline
+            var passes = 4;
+            editorSegments = await runVerificationPipeline(editorSegments, aiProvider, primaryLang, sourceLang, passes);
+
+            // Re-render table with new tokens
+            renderEditorTable();
+
+            // Show inline success
+            var headerSpan = document.querySelector("#editor-panel .editor-header span");
+            if (headerSpan) {
+                var oldSpanText = headerSpan.textContent;
+                headerSpan.innerHTML = "<span style='color:var(--success)'>✓ Captions Improved</span>";
+                setTimeout(function () { headerSpan.textContent = oldSpanText; }, 3000);
+            }
+        } catch (err) {
+            console.error("[Captiongrit] AI Improve Error:", err);
+            alert("AI Improve failed: " + err.message);
+        } finally {
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }
     }
 
     function hideEditorPanel() {
@@ -1531,13 +1936,87 @@
         return null;
     }
 
+    var currentEditorClipIdx = null;
+
+    function tryOpenEditor() {
+        if (!BatchSession || BatchSession.isEditorOpen) return;
+        if (BatchSession.editorQueue.length > 0) {
+            BatchSession.isEditorOpen = true;
+            currentEditorClipIdx = BatchSession.editorQueue.shift();
+            var segments = BatchSession.transcripts[currentEditorClipIdx];
+            var clipName = BatchSession.clips[currentEditorClipIdx].name;
+
+            var headerSpan = document.querySelector("#editor-panel .editor-header span");
+            if (headerSpan) {
+                var currentNum = BatchSession.completedClips.indexOf(currentEditorClipIdx) + 1;
+                headerSpan.innerHTML = "Reviewing: <strong>" + clipName + "</strong> (" + currentNum + " of " + BatchSession.clips.length + ")";
+            }
+
+            showEditorPanel(segments, BatchSession.outputOptions);
+        } else {
+            checkCompletion();
+        }
+    }
+
+    function cleanupClipMemory(clipIdx) {
+        if (!BatchSession) return;
+
+        // Remove text references
+        delete BatchSession.transcripts[clipIdx];
+        BatchSession.clips[clipIdx].sttResults = null;
+
+        // Unlink extracted audio
+        var c = BatchSession.clips[clipIdx];
+        if (c.audioPath && fs) {
+            try { fs.unlinkSync(c.audioPath); } catch (e) { }
+        }
+
+        // We let cleanupBatchSession clean up chunk paths, since they were already popped from queue
+        // but it's safe to unlink them here too if we tracked them, but chunkQueue shifted them out.
+    }
+
+    function finishBatch() {
+        hideProgress();
+        document.getElementById("generate-section").style.display = "block";
+        document.getElementById("editor-panel").style.display = "none";
+
+        var successCount = BatchSession.completedClips.length;
+        var failCount = BatchSession.failedClips.length;
+        var msg = "Batch processing complete.";
+        if (failCount > 0) msg += " " + failCount + " clip(s) failed.";
+
+        showDone(successCount, msg);
+        cleanupBatchSession();
+    }
+
+    function cleanupBatchSession() {
+        if (BatchSession) {
+            if (BatchSession.clips) {
+                BatchSession.clips.forEach(function (c) {
+                    if (c.audioPath && fs) {
+                        try { fs.unlinkSync(c.audioPath); } catch (e) { }
+                    }
+                });
+            }
+            if (BatchSession.chunkQueue) {
+                BatchSession.chunkQueue.forEach(function (c) {
+                    if (c.path && fs) {
+                        try { fs.unlinkSync(c.path); } catch (e) { }
+                    }
+                });
+            }
+        }
+        BatchSession = null;
+        currentEditorClipIdx = null;
+    }
+
     async function handleEditorImport() {
         hideEditorPanel();
         showProgress();
         setProgressStep("Applying edits and finalizing output...");
         setProgressBar(90);
         setTimeout(function () {
-            finalizeOutput(editorSegments, editorOutputOptions);
+            finalizeOutput(editorSegments, editorOutputOptions, currentEditorClipIdx);
         }, 100);
     }
 
@@ -1609,16 +2088,18 @@
         }
     }
 
-    async function finalizeOutput(segments, outputOptions) {
+    async function finalizeOutput(segments, outputOptions, clipIdx) {
         try {
             var srtPath = "";
+            var clip = BatchSession.clips[clipIdx];
             var timestamp = new Date().getTime();
-            var uniqueFilename = "captions_" + timestamp;
+            var safeName = clip.name ? clip.name.replace(/[^a-z0-9]/gi, '_').toLowerCase() : "clip";
+            var uniqueFilename = safeName + "_captions_" + timestamp;
 
             if (outputOptions.includes("text_layers") && !cancelled) {
+                setProgressStep("Creating text layers for " + clip.name + "...");
                 var isPPro = csInterface && csInterface.getHostEnvironment().appId === "PPRO";
                 if (isPPro) {
-                    setProgressStep("Generating and importing SRT...");
                     var projectFolder = await evalScriptAsync("getProjectFolder()");
                     var srtResult = await evalScriptAsync(
                         "exportSRT('" + escapeJSXString(JSON.stringify(segments)) + "', '" + escapeJSX(projectFolder) + "', '" + uniqueFilename + ".srt')"
@@ -1628,7 +2109,6 @@
                         showStatus("warning", srtData.error);
                     } else {
                         srtPath = srtData.path;
-                        // Import it into Premiere Pro Project Bin
                         var importResult = await evalScriptAsync("importFileToProject('" + escapeJSX(srtPath) + "')");
                         var importData = JSON.parse(importResult);
                         if (importData.error) {
@@ -1636,7 +2116,6 @@
                         }
                     }
                 } else {
-                    setProgressStep("Creating AE text layers...");
                     var textType = "point";
                     var layerResult = await evalScriptAsync(
                         "createTextLayers('" + escapeJSXString(JSON.stringify(segments)) + "', '" + textType + "')"
@@ -1650,7 +2129,7 @@
             }
 
             if (outputOptions.includes("srt_export") && !cancelled) {
-                setProgressStep("Exporting SRT file...");
+                setProgressStep("Exporting SRT for " + clip.name + "...");
                 var srtResult = await evalScriptAsync(
                     "exportSRTWithDialog('" + escapeJSXString(JSON.stringify(segments)) + "', '" + uniqueFilename + "')"
                 );
@@ -1663,30 +2142,15 @@
                 setProgressBar(95);
             }
 
-            setProgressBar(100);
-            setProgressStep("Done!");
-
-            var details = [];
-            var isPPro = csInterface && csInterface.getHostEnvironment().appId === "PPRO";
-            if (outputOptions.includes("text_layers")) {
-                if (isPPro) {
-                    details.push("SRT imported to Project Bin! Drag to timeline.");
-                } else {
-                    details.push("Text layers added to composition");
-                }
-            }
-            if (srtPath && !(isPPro && outputOptions.includes("text_layers") && !outputOptions.includes("srt_export"))) {
-                details.push("SRT saved: " + srtPath);
-            }
-
-            setTimeout(function () {
-                showDone(segments.length, details.join(" Â· "));
-            }, 500);
+            BatchSession.isEditorOpen = false;
+            cleanupClipMemory(clipIdx);
+            tryOpenEditor();
 
         } catch (err) {
-            hideProgress();
-            document.getElementById("generate-section").style.display = "block";
-            showStatus("error", err.message);
+            showStatus("error", "Error exporting clip: " + err.message);
+            BatchSession.isEditorOpen = false;
+            cleanupClipMemory(clipIdx);
+            tryOpenEditor();
         }
     }
 
@@ -4110,13 +4574,13 @@
                     status: resp.status,
                     body: bodyText
                 });
-                
+
                 // If it's a model not found (404), quota (429), or server error (500, 503), try next model
                 if (resp.status === 404 || resp.status === 429 || resp.status === 500 || resp.status === 503) {
                     console.warn("Gemini " + model + " unavailable or quota hit (" + resp.status + "), trying next model...");
                     continue;
                 }
-                
+
                 // For other errors (e.g. 400, 401, 403), fail immediately to avoid hiding config problems
                 throw new Error(JSON.stringify(errors, null, 2));
             }
@@ -4272,7 +4736,7 @@
 
         if (cancelled) throw new Error("Cancelled");
 
-        var phoneticInstruction = primaryLang === "phonetic" ? 
+        var phoneticInstruction = primaryLang === "phonetic" ?
             "CRITICAL: Write the translated " + targetLangName + " entirely in English Phonetic Romanization (how it sounds in English letters). Do NOT use native " + targetLangName + " script.\n\n" : "";
 
         var wordByWordInstruction = captionStyle === "word_by_word" ?
@@ -4401,19 +4865,19 @@
     }
 
     function validateFFmpeg(testPath) {
-        return new Promise(function(resolve) {
+        return new Promise(function (resolve) {
             if (!fs || !cp) {
                 addFfmpegDiagnostic("Node.js 'fs' or 'cp' not available.");
                 return resolve(false);
             }
             if (!testPath) return resolve(false);
-            
+
             addFfmpegDiagnostic("Validating path: " + testPath);
             if (!fs.existsSync(testPath)) {
                 addFfmpegDiagnostic("File does not exist.");
                 return resolve(false);
             }
-            
+
             try {
                 fs.chmodSync(testPath, 0o755);
                 fs.accessSync(testPath, fs.constants.X_OK);
@@ -4421,13 +4885,13 @@
                 addFfmpegDiagnostic("Executable permission error: " + e.message);
                 return resolve(false);
             }
-            
+
             var execOpts = { timeout: 3000 };
             if (process.platform === 'darwin') {
                 execOpts = getMacExecOpts({ timeout: 3000 });
             }
-            
-            cp.execFile(testPath, ['-version'], execOpts, function(err, stdout, stderr) {
+
+            cp.execFile(testPath, ['-version'], execOpts, function (err, stdout, stderr) {
                 if (err) {
                     addFfmpegDiagnostic("Execution error: " + err.message);
                     return resolve(false);
@@ -4445,22 +4909,22 @@
 
     async function initializeFFmpeg(forceRecalculate) {
         if (_ffmpegPathCache && !forceRecalculate) return _ffmpegPathCache;
-        
+
         _ffmpegDiagnostics = [];
         var osStr = process ? process.platform : navigator.platform.toLowerCase();
         var arch = process ? process.arch : 'unknown';
         addFfmpegDiagnostic("OS: " + osStr + " | Arch: " + arch);
-        
+
         if (process && process.env && process.env.PATH) {
             addFfmpegDiagnostic("PATH: " + process.env.PATH);
         }
-        
+
         var extPath = csInterface ? csInterface.getSystemPath(SystemPath.EXTENSION) : "";
         var customPath = localStorage.getItem('custom_ffmpeg_path');
-        
+
         var searchPaths = [];
         if (customPath) searchPaths.push(customPath);
-        
+
         if (osStr === 'darwin' || osStr.indexOf('mac') > -1) {
             searchPaths.push(extPath + "/bin/mac/ffmpeg");
             searchPaths.push("/opt/homebrew/bin/ffmpeg");
@@ -4474,7 +4938,7 @@
             searchPaths.push("/usr/bin/ffmpeg");
             searchPaths.push("/usr/local/bin/ffmpeg");
         }
-        
+
         var foundPath = null;
         for (var i = 0; i < searchPaths.length; i++) {
             var isValid = await validateFFmpeg(searchPaths[i]);
@@ -4483,7 +4947,7 @@
                 break;
             }
         }
-        
+
         _ffmpegPathCache = foundPath;
         updateFFmpegUI();
         return foundPath;
@@ -4500,7 +4964,7 @@
         var input = document.getElementById("ffmpeg-path-input");
         var badge = document.getElementById("ffmpeg-status-badge");
         if (!input || !badge) return;
-        
+
         if (_ffmpegPathCache) {
             input.value = _ffmpegPathCache;
             badge.textContent = "✅ Validated";
@@ -4546,10 +5010,10 @@
     // Returns retry delay in ms based on error type. Non-retryable errors return -1.
     function getRetryDelay(errorType) {
         switch (errorType) {
-            case 'network':      return 0;     // Retry immediately
-            case 'rate_limit':   return 5000;  // Wait 5s for quota reset
+            case 'network': return 0;     // Retry immediately
+            case 'rate_limit': return 5000;  // Wait 5s for quota reset
             case 'server_error': return 2000;  // Wait 2s for server recovery
-            default:             return -1;    // Don't retry
+            default: return -1;    // Don't retry
         }
     }
 
@@ -4609,12 +5073,16 @@
         if (activeEmailEl) activeEmailEl.textContent = email;
 
         var betaIndicator = document.getElementById("beta-indicator");
+        var betaUpgradeBtn = document.getElementById("beta-upgrade-btn");
         if (betaIndicator) {
             if (getPlanId() === "beta" && betaDaysLeft !== undefined) {
-                betaIndicator.textContent = "Beta: " + betaDaysLeft + " days left";
+                betaIndicator.textContent = betaDaysLeft + " Days Left";
                 betaIndicator.style.display = "inline-block";
+                betaIndicator.style.cursor = "default";
+                if (betaUpgradeBtn) betaUpgradeBtn.style.display = "inline-block";
             } else {
                 betaIndicator.style.display = "none";
+                if (betaUpgradeBtn) betaUpgradeBtn.style.display = "none";
             }
         }
     }
@@ -4655,7 +5123,7 @@
                     break;
                 }
             }
-        } catch (e) { /* Node.js not available \u2014 use browser-only fingerprint */ }
+        } catch (e) { /* Node.js not available — use browser-only fingerprint */ }
         var hash = 0;
         for (var i = 0; i < str.length; i++) {
             var char = str.charCodeAt(i);
@@ -4667,58 +5135,149 @@
 
     async function validateLicense(email, licenseKey, deviceId) {
         try {
-            var resp = await fetch(LICENSE_URL, {
+            console.log("validateLicense: Starting request...");
+            var resp = await fetchWithTimeout(LICENSE_URL, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ email: email, licenseKey: licenseKey, deviceId: deviceId })
-            });
+                headers: { "Content-Type": "text/plain" },
+                body: JSON.stringify({ email: email, licenseKey: licenseKey, deviceId: deviceId }),
+                redirect: "follow"
+            }, 15000);
+            console.log("validateLicense: Response status = " + resp.status);
             if (resp.ok) {
-                var data = await resp.json();
-                return data;
+                var text = await resp.text();
+                console.log("validateLicense: Response = " + text.substring(0, 500));
+                try {
+                    var data = JSON.parse(text);
+                    return data;
+                } catch (parseErr) {
+                    console.error("validateLicense: JSON parse error:", parseErr);
+                    return { valid: false, authenticated: false, reason: "invalid_response" };
+                }
             }
-            return { valid: false, reason: "network_error" };
+            console.error("validateLicense: Non-OK status:", resp.status);
+            return { valid: false, authenticated: false, reason: "network_error" };
         } catch (e) {
             console.error("License validation error:", e);
-            return { valid: false, reason: "network_error" };
+            return { valid: false, authenticated: false, reason: "network_error", message: e.message };
         }
     }
 
+    // Refresh license silently when user switches back to Premiere (e.g., after upgrading in browser)
+    async function refreshLicenseState() {
+        var storedEmail = localStorage.getItem("captiongrit_email");
+        var storedKey = localStorage.getItem("captiongrit_key");
+        var storedDeviceId = localStorage.getItem("captiongrit_device_id");
+
+        if (storedEmail && storedKey && storedDeviceId) {
+            try {
+                var response = await validateLicense(storedEmail, storedKey, storedDeviceId);
+                if (response.authenticated) {
+                    window.CaptiongritSession = response;
+                    TIER = window.CaptiongritSession.capabilities;
+                    localStorage.setItem(STORAGE_PREFIX + "capabilities", JSON.stringify(TIER));
+                    
+                    var badge = document.getElementById("plan-badge");
+                    if (badge) {
+                        badge.textContent = PLAN_LABELS[getPlanId()] || "Basic";
+                        badge.className = "plan-badge plan-" + getPlanId();
+                    }
+                    
+                    // Explicitly synchronize beta indicator
+                    var betaIndicator = document.getElementById("beta-indicator");
+                    var betaUpgradeBtn = document.getElementById("beta-upgrade-btn");
+                    if (betaIndicator) {
+                        if (getPlanId() === "beta" && response.betaDaysLeft !== undefined) {
+                            betaIndicator.textContent = response.betaDaysLeft + " Days Left";
+                            betaIndicator.style.display = "inline-block";
+                            betaIndicator.style.cursor = "default";
+                            if (betaUpgradeBtn) betaUpgradeBtn.style.display = "inline-block";
+                        } else {
+                            betaIndicator.style.display = "none";
+                            if (betaUpgradeBtn) betaUpgradeBtn.style.display = "none";
+                        }
+                    }
+
+                    showMainPanel(response.betaDaysLeft);
+                    applyFeatureGating();
+
+                    // Re-initialize presets if newly unlocked, avoiding duplicate listeners
+                    if (TIER.hasPresets && !window._presetsInitialized) {
+                        initPresets();
+                        window._presetsInitialized = true;
+                    }
+
+                    // Attempt to close upgrade modal if it was open
+                    hideUpgradeModal();
+                }
+            } catch (err) {
+                // Ignore silent network errors during background refresh
+            }
+        }
+    }
+
+    // Trigger refresh on focus
+    window.addEventListener("focus", function() {
+        refreshLicenseState();
+    });
+
     async function checkForUpdates() {
         try {
-            var CURRENT_VERSION = "1.0.0";
-            var resp = await fetch(LICENSE_URL, {
+            var CURRENT_VERSION = "1.0.1";
+            var statusEl = document.getElementById("settings-update-status");
+            var settingsBtn = document.getElementById("btn-settings-download-update");
+
+            var resp = await fetchWithTimeout(LICENSE_URL, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action: "check_update" })
-            });
+                headers: { "Content-Type": "text/plain" },
+                body: JSON.stringify({ action: "check_update" }),
+                redirect: "follow"
+            }, 10000);
+
             if (resp.ok) {
                 var data = await resp.json();
                 if (data.latest_version && data.latest_version !== CURRENT_VERSION) {
+                    // Update Modal UI
                     var modal = document.getElementById("update-modal");
                     var numSpan = document.getElementById("update-version-num");
                     var msgSpan = document.getElementById("update-modal-msg");
                     var linkBtn = document.getElementById("update-modal-btn");
                     var closeBtn = document.getElementById("btn-close-update");
-                    
+
                     if (modal && numSpan && linkBtn) {
                         numSpan.textContent = data.latest_version;
                         if (data.message) msgSpan.textContent = data.message;
                         linkBtn.href = data.download_url;
-                        linkBtn.onclick = function() {
+                        linkBtn.onclick = function () {
                             window.cep.util.openURLInDefaultBrowser(data.download_url);
                             return false;
                         };
                         modal.style.display = "flex";
-                        
+
                         if (closeBtn) {
-                            closeBtn.onclick = function() {
+                            closeBtn.onclick = function () {
                                 modal.style.display = "none";
                             };
                         }
                     }
+
+                    // Update Settings Tab UI
+                    if (statusEl) statusEl.textContent = "Update Available: " + data.latest_version;
+                    if (settingsBtn) {
+                        settingsBtn.style.display = "block";
+                        settingsBtn.onclick = function () {
+                            window.cep.util.openURLInDefaultBrowser(data.download_url);
+                        };
+                    }
+                } else {
+                    if (statusEl) statusEl.textContent = "You are completely up to date (v" + CURRENT_VERSION + ").";
+                    if (settingsBtn) settingsBtn.style.display = "none";
                 }
+            } else {
+                if (statusEl) statusEl.textContent = "Could not check for updates.";
             }
         } catch (e) {
+            var statusEl = document.getElementById("settings-update-status");
+            if (statusEl) statusEl.textContent = "Could not check for updates.";
             console.error("Update check error:", e);
         }
     }
@@ -4776,37 +5335,73 @@
             errorMsg.textContent = "Activating license...";
         }
 
-        var deviceId = localStorage.getItem("captiongrit_device_id") || getDeviceFingerprint();
-        var response = await validateLicense(email, key, deviceId);
-        if (response.authenticated) {
-            window.CaptiongritSession = response;
-            TIER = window.CaptiongritSession.capabilities;
-            
-            localStorage.setItem("captiongrit_device_id", deviceId);
-            localStorage.setItem("captiongrit_email", email);
-            localStorage.setItem("captiongrit_key", key);
-            localStorage.setItem(STORAGE_PREFIX + "auth_email", email);
-            localStorage.removeItem("captiongrit_licensed");
-            
-            // Re-initialize feature gating now that capabilities are loaded
-            applyFeatureGating();
-            if (TIER.hasPresets) initPresets();
-            
-            showMainPanel(response.betaDaysLeft);
-        } else {
-            if (response.reason === "device_limit_reached") {
-                showError("This license is already activated on the maximum number of devices. Contact support to transfer your license.");
-            } else if (response.reason === "beta_expired") {
-                showError("Your 7-day Beta trial has expired.");
-                if (document.getElementById("buyBtn")) document.getElementById("buyBtn").style.display = "block";
-                if (document.getElementById("activateBtn")) document.getElementById("activateBtn").style.display = "none";
+        try {
+            var deviceId = localStorage.getItem("captiongrit_device_id") || getDeviceFingerprint();
+            var response = await validateLicense(email, key, deviceId);
+            console.log("Activation response:", JSON.stringify(response));
+            if (response.authenticated) {
+                window.CaptiongritSession = response;
+                TIER = window.CaptiongritSession.capabilities;
+
+                localStorage.setItem("captiongrit_device_id", deviceId);
+                localStorage.setItem("captiongrit_email", email);
+                localStorage.setItem("captiongrit_key", key);
+                localStorage.setItem(STORAGE_PREFIX + "auth_email", email);
+                localStorage.setItem(STORAGE_PREFIX + "capabilities", JSON.stringify(TIER));
+                localStorage.removeItem("captiongrit_licensed");
+
+                // Re-initialize feature gating now that capabilities are loaded
+                applyFeatureGating();
+                if (TIER.hasPresets) initPresets();
+
+                showMainPanel(response.betaDaysLeft);
             } else {
-                showError("Invalid license key or email.");
+                if (response.reason === "device_limit_reached") {
+                    showError("This license is already activated on the maximum number of devices. Contact support to transfer your license.");
+                } else if (response.reason === "beta_expired") {
+                    showError("Your 7-day Beta trial has expired.");
+                    if (document.getElementById("buyBtn")) document.getElementById("buyBtn").style.display = "block";
+                    if (document.getElementById("activateBtn")) document.getElementById("activateBtn").style.display = "none";
+                } else if (response.reason === "network_error") {
+                    showError("Network error: Could not reach the license server. Check your internet connection." + (response.message ? " (" + response.message + ")" : ""));
+                } else {
+                    showError("Invalid license key or email. (reason: " + (response.reason || "unknown") + ")");
+                }
             }
+        } catch (err) {
+            console.error("handleActivateClick error:", err);
+            showError("Activation failed: " + err.message);
         }
     }
 
+
     function deactivateLicense() {
+        // Fire-and-forget: tell the backend to free this device seat
+        var email = localStorage.getItem("captiongrit_email");
+        var key = localStorage.getItem("captiongrit_key");
+        var deviceId = localStorage.getItem("captiongrit_device_id");
+        if (email && key && deviceId) {
+            try {
+                fetchWithTimeout(LICENSE_URL, {
+                    method: "POST",
+                    headers: { "Content-Type": "text/plain" },
+                    body: JSON.stringify({
+                        action: "deactivate_device",
+                        email: email,
+                        licenseKey: key,
+                        deviceId: deviceId
+                    }),
+                    redirect: "follow"
+                }, 10000).then(function (resp) {
+                    console.log("Deactivate device response:", resp.status);
+                }).catch(function (err) {
+                    console.warn("Deactivate device request failed (non-critical):", err.message);
+                });
+            } catch (e) {
+                console.warn("Deactivate device error (non-critical):", e);
+            }
+        }
+
         window.CaptiongritSession = {
             authenticated: false,
             user: { email: null, license: null, plan: "basic", expires: null, lastValidated: null },
@@ -4815,6 +5410,7 @@
         TIER = window.CaptiongritSession.capabilities;
         localStorage.removeItem("captiongrit_licensed");
         localStorage.removeItem(STORAGE_PREFIX + "auth_email");
+        localStorage.removeItem(STORAGE_PREFIX + "capabilities");
         localStorage.removeItem("captiongrit_email");
         localStorage.removeItem("captiongrit_key");
         localStorage.removeItem("captiongrit_device_id");

@@ -5,7 +5,7 @@ const fs = require('fs');
 const extDir = path.join(__dirname, '..', 'dist', 'Captiongrit-Pro');
 const outZxp = path.join(__dirname, '..', 'Captiongrit-Pro.zxp');
 const certPath = path.join(__dirname, '..', 'certificate.p12');
-const certPassword = 'captiongrit';
+const certPassword = process.env.CERT_PASSWORD || 'captiongrit';
 
 const TIERS = ["Basic", "Pro", "Extreme", "Beta"];
 
