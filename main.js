@@ -235,7 +235,7 @@
 
         var storedEmail = localStorage.getItem("captiongrit_email");
         var storedKey = localStorage.getItem("captiongrit_key");
-        var storedDeviceId = localStorage.getItem("captiongrit_device_id");
+        var storedDeviceId = getPersistentDeviceId();
 
         // Clear HTML failsafe since main.js loaded successfully
         if (typeof window.__clearLoadingFailsafe === "function") {
@@ -285,15 +285,35 @@
                     showLicensePanel();
                     showError("Could not reach license server. Check your internet connection.");
                 } else {
-                    showLicensePanel();
-                    if (response.reason === "device_limit_reached") {
-                        showError("Device limit reached for your plan. Contact support to transfer your license.");
-                    } else if (response.reason === "beta_expired") {
-                        showError("Your 7-day Beta trial has expired.");
-                        if (document.getElementById("buyBtn")) document.getElementById("buyBtn").style.display = "block";
-                        if (document.getElementById("activateBtn")) document.getElementById("activateBtn").style.display = "none";
+                    var strictRejections = ["device_limit_reached", "beta_expired", "license_expired", "invalid_license", "license_deactivated", "missing_fields"];
+                    if (strictRejections.includes(response.reason)) {
+                        showLicensePanel();
+                        if (response.reason === "device_limit_reached") {
+                            showError("Device limit reached for your plan. Contact support to transfer your license.");
+                        } else if (response.reason === "beta_expired") {
+                            showError("Your 7-day Beta trial has expired.");
+                            if (document.getElementById("buyBtn")) document.getElementById("buyBtn").style.display = "block";
+                            if (document.getElementById("activateBtn")) document.getElementById("activateBtn").style.display = "none";
+                        } else {
+                            showError("License invalid or expired.");
+                        }
                     } else {
-                        showError("License invalid or expired.");
+                        console.warn("Captiongrit: Unknown server response (" + response.reason + "). Treating as temporary technical failure. Using saved capabilities for offline bypass.");
+                        var savedCapabilities = localStorage.getItem(STORAGE_PREFIX + "capabilities");
+                        if (savedCapabilities) {
+                            try {
+                                TIER = JSON.parse(savedCapabilities);
+                                window.CaptiongritSession = { authenticated: true, capabilities: TIER };
+                                showMainPanel();
+                                applyFeatureGating();
+                                if (TIER.hasPresets) initPresets();
+                                return;
+                            } catch (e) {
+                                console.error("Failed to parse saved capabilities", e);
+                            }
+                        }
+                        showLicensePanel();
+                        showError("Could not reach license server. Check your internet connection.");
                     }
                 }
             }).catch(function (err) {
@@ -1242,7 +1262,7 @@
         // -- License re-validation (security: prevents console bypass) --
         var _email = localStorage.getItem("captiongrit_email");
         var _key = localStorage.getItem("captiongrit_key");
-        var _deviceId = localStorage.getItem("captiongrit_device_id");
+        var _deviceId = getPersistentDeviceId();
         if (!_email || !_key || !_deviceId) {
             showLicensePanel();
             showStatus("error", "License not found. Please activate your license.");
@@ -5106,22 +5126,25 @@
     }
 
     function getDeviceFingerprint() {
-        var str = navigator.userAgent + "|" + navigator.language + "|" + screen.width + "x" + screen.height + "|" + Intl.DateTimeFormat().resolvedOptions().timeZone;
-        // Strengthen with Node.js OS info if available
+        var str = "CAPTIONGRIT_FINGERPRINT";
+        // Use strict hardware/OS parameters that do not change on Premiere Pro updates or monitor changes
         try {
             var os = window.require ? window.require("os") : require("os");
             str += "|" + os.hostname() + "|" + os.platform() + "|" + os.arch();
             var nics = os.networkInterfaces();
+            var macs = [];
             for (var nicName in nics) {
                 if (nics.hasOwnProperty(nicName)) {
                     for (var j = 0; j < nics[nicName].length; j++) {
                         if (nics[nicName][j].mac && nics[nicName][j].mac !== "00:00:00:00:00:00") {
-                            str += "|" + nics[nicName][j].mac;
-                            break;
+                            macs.push(nics[nicName][j].mac);
                         }
                     }
-                    break;
                 }
+            }
+            if (macs.length > 0) {
+                macs.sort();
+                str += "|" + macs.join("|");
             }
         } catch (e) { /* Node.js not available — use browser-only fingerprint */ }
         var hash = 0;
@@ -5131,6 +5154,49 @@
             hash = hash & hash;
         }
         return "DEVICE_" + Math.abs(hash).toString(16);
+    }
+
+    function getPersistentDeviceId() {
+        var deviceId = localStorage.getItem("captiongrit_device_id");
+        if (deviceId) {
+            try {
+                var fs = window.require ? window.require("fs") : require("fs");
+                var os = window.require ? window.require("os") : require("os");
+                var path = window.require ? window.require("path") : require("path");
+                var idFilePath = path.join(os.homedir(), ".captiongrit_device_id");
+                if (!fs.existsSync(idFilePath)) {
+                    fs.writeFileSync(idFilePath, deviceId, "utf8");
+                }
+            } catch(e) {}
+            return deviceId;
+        }
+
+        try {
+            var fs = window.require ? window.require("fs") : require("fs");
+            var os = window.require ? window.require("os") : require("os");
+            var path = window.require ? window.require("path") : require("path");
+            var idFilePath = path.join(os.homedir(), ".captiongrit_device_id");
+            if (fs.existsSync(idFilePath)) {
+                deviceId = fs.readFileSync(idFilePath, "utf8").trim();
+                if (deviceId) {
+                    localStorage.setItem("captiongrit_device_id", deviceId);
+                    return deviceId;
+                }
+            }
+        } catch(e) {}
+        
+        deviceId = getDeviceFingerprint();
+        localStorage.setItem("captiongrit_device_id", deviceId);
+        
+        try {
+            var fs = window.require ? window.require("fs") : require("fs");
+            var os = window.require ? window.require("os") : require("os");
+            var path = window.require ? window.require("path") : require("path");
+            var idFilePath = path.join(os.homedir(), ".captiongrit_device_id");
+            fs.writeFileSync(idFilePath, deviceId, "utf8");
+        } catch(e) {}
+        
+        return deviceId;
     }
 
     async function validateLicense(email, licenseKey, deviceId) {
@@ -5166,7 +5232,7 @@
     async function refreshLicenseState() {
         var storedEmail = localStorage.getItem("captiongrit_email");
         var storedKey = localStorage.getItem("captiongrit_key");
-        var storedDeviceId = localStorage.getItem("captiongrit_device_id");
+        var storedDeviceId = getPersistentDeviceId();
 
         if (storedEmail && storedKey && storedDeviceId) {
             try {
@@ -5222,7 +5288,7 @@
 
     async function checkForUpdates() {
         try {
-            var CURRENT_VERSION = "1.0.1";
+            var CURRENT_VERSION = "1.0.2";
             var statusEl = document.getElementById("settings-update-status");
             var settingsBtn = document.getElementById("btn-settings-download-update");
 
@@ -5336,7 +5402,7 @@
         }
 
         try {
-            var deviceId = localStorage.getItem("captiongrit_device_id") || getDeviceFingerprint();
+            var deviceId = getPersistentDeviceId();
             var response = await validateLicense(email, key, deviceId);
             console.log("Activation response:", JSON.stringify(response));
             if (response.authenticated) {
@@ -5379,7 +5445,7 @@
         // Fire-and-forget: tell the backend to free this device seat
         var email = localStorage.getItem("captiongrit_email");
         var key = localStorage.getItem("captiongrit_key");
-        var deviceId = localStorage.getItem("captiongrit_device_id");
+        var deviceId = getPersistentDeviceId();
         if (email && key && deviceId) {
             try {
                 fetchWithTimeout(LICENSE_URL, {
@@ -5414,6 +5480,15 @@
         localStorage.removeItem("captiongrit_email");
         localStorage.removeItem("captiongrit_key");
         localStorage.removeItem("captiongrit_device_id");
+        try {
+            var fs = window.require ? window.require("fs") : require("fs");
+            var os = window.require ? window.require("os") : require("os");
+            var path = window.require ? window.require("path") : require("path");
+            var idFilePath = path.join(os.homedir(), ".captiongrit_device_id");
+            if (fs.existsSync(idFilePath)) {
+                fs.unlinkSync(idFilePath);
+            }
+        } catch(e) {}
         showLicensePanel();
     }
 

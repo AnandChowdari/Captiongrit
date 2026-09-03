@@ -1,45 +1,26 @@
-# Refine Captiongrit Architecture & Fix Bugs
+# Fix Random Logout & Max Devices Limit Bug
 
-This plan addresses your requested changes regarding transcription accuracy, fixing the word-by-word engine crash, phonetic translation issues, batch processing performance, and branding.
+This plan addresses the issue where users are randomly logged out and incorrectly hit the "Max devices limit" even when logging back in on their only allowed device.
 
 ## User Review Required
 
-> [!WARNING]  
-> **Batch Processing Performance**: The reason batch processing was taking so long is that the `DoubleCheck` (Multi-pass verification) engine was running sequentially on every single clip in the batch. Each clip was making 3-4 separate calls to the AI, hitting rate limits and slowing the entire pipeline to a crawl. By disabling this for the Basic plan, batch speed will dramatically improve.
-
-## Open Questions
-
-> [!IMPORTANT]  
-> **Branding Theme**: You mentioned giving Basic, Pro, and Extreme as something like "cat shoes" (or perhaps "Catchy Hues" / "CapCut"?) in that build as a constant theme. Did you mean you want a "CapCut-style" dark and sleek theme across the UI? I will implement a sleek dark mode theme, but please clarify if you meant a specific color palette (e.g., cyan/black or purple/dark).
+> [!CAUTION]
+> **Root Cause**: The "Max devices limit" error occurs because Premiere Pro occasionally clears the CEP `localStorage`, which forces the plugin to generate a new `deviceId` for the user. The current `getDeviceFingerprint()` function is unstable—it picks the MAC address of the *first* network adapter it finds. If a user connects to a VPN or switches from Wi-Fi to Ethernet, the adapter order changes, creating a new fingerprint. The server sees this as a new, second device and blocks the login, while still holding the old device ID hostage.
 
 ## Proposed Changes
 
 ### `main.js` (Core Engine Fixes)
 
-#### [MODIFY] main.js
-1. **Fix Transcription Modification (Prompt Engineering)**: 
-   - Update `buildConversionPrompt` to strongly enforce that the AI should never translate or alter the words. I will add the rule: `"DO NOT TRANSLATE OR ALTER ANY WORDS. KEEP THE EXACT SOURCE WORDS EVEN IF THEY SEEM INCORRECT."`
-2. **Fix Word-by-Word Engine Crash**:
-   - The script was throwing an error and defaulting to base captions because `runWBWPass` was broken by a previous patch script. It is currently missing the loop that attaches the actual transcript words to the AI prompt, and the loop that processes the result! I will restore this logic so `runWBWPass` correctly sends and parses the pipe-separated tokens.
-3. **Fix Translation Phonetics & Word-by-Word Translation**:
-   - Currently, `translateCaptions` does not enforce phonetic output even if the user selected "English Phonetic" for the grid. I will update `translateCaptions(segments, translateLang, aiProvider, sourceLang, primaryLang, captionStyle)` to include instructions for English phonetic romanization (if `primaryLang === "phonetic"`) and strict single-word outputs (if `captionStyle === "word_by_word"`).
-4. **Remove Multi-Pass Engine from Basic Tier**:
-   - Change `basic: { ... hasDoubleCheck: false }` so the multi-pass engine never runs on the Basic tier. This fixes the misleading loading bar and speeds up basic batch processing.
-
-### `index.html` & `style.css` (Branding)
-
-#### [MODIFY] index.html & style.css
-1. **Basic / Pro / Extreme Branding**: 
-   - Apply a cohesive, premium dark-mode theme to the plugin UI to match the "CapCut" / sleek aesthetic.
-   - Lock/hide the "Advanced Double Check" toggle entirely for Basic users to avoid confusion.
+#### [MODIFY] [main.js](file:///f:/Coding/Projects/Caption%20Integrit/main.js)
+1. **Stable Fingerprinting**: 
+   - Update `getDeviceFingerprint()` to collect all non-zero MAC addresses, sort them, and hash them together. This guarantees the exact same fingerprint is generated even if network adapters turn on/off or change order.
+2. **Persistent File System Storage**: 
+   - Instead of relying solely on Premiere Pro's volatile `localStorage`, the plugin will read and write the `deviceId` to a persistent file in the user's home directory (e.g., `~/.captiongrit_device_id`). This ensures the device ID survives cache clears and Premiere Pro updates.
 
 ## Verification Plan
 
-### Automated Tests
-- N/A (Standard plugin environment)
-
 ### Manual Verification
-- Run a test transcription with Word-by-Word mode to verify the AI engine no longer crashes.
-- Translate a Telugu source clip to Tamil (English Phonetic) to ensure the output is Tanglish, not Tamil script.
-- Verify batch processing on the Basic plan no longer triggers the multi-pass engine and completes significantly faster.
-- Review the updated UI theme.
+- Clear `localStorage` manually using the plugin debugger.
+- Close and reopen Premiere Pro to verify that the plugin successfully retrieves the persistent `deviceId` from the file system and logs in automatically.
+- Toggle network adapters (e.g., connect/disconnect Wi-Fi) and verify the generated fingerprint remains identical.
+- Ensure the server correctly recognizes the device and no longer throws the "Max devices limit" error.
