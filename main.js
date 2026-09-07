@@ -9,10 +9,10 @@
     // ------------------------------------------
     // Plan Tier System Descriptions
     // ------------------------------------------
-    // Basic:   maxDuration: 30s, maxDevices: 1, maxClips: 1, Full Sentence only
-    // Pro:     maxDuration: 150s, maxDevices: 1, maxClips: 1, Word By Word, Editor, Double Check, Custom Dict, English Output
+    // Basic:   maxDuration: 60s, maxDevices: 1, maxClips: 1, Full Sentence only
+    // Pro:     maxDuration: 180s, maxDevices: 1, maxClips: 1, Word By Word, Editor, Double Check, Custom Dict, English Output
     // Extreme: maxDuration: unlimited, maxDevices: 3, maxClips: 99, all Pro features + Batch Processing
-    // Beta:    Same as Extreme (Internal testing tier)
+    // Beta:    maxDuration: 30s, maxDevices: 1, maxClips: 1, Restricted trial tier
     // ------------------------------------------
 
     // ------------------------------------------
@@ -214,8 +214,9 @@
         var buyBtn = document.getElementById("buyBtn");
         if (buyBtn) {
             buyBtn.addEventListener("click", function () {
-                var e = localStorage.getItem("captiongrit_email") || "";
-                var k = localStorage.getItem("captiongrit_key") || "";
+                var auth = typeof getStoredAuth === "function" ? getStoredAuth() : null;
+                var e = (auth && auth.email) || localStorage.getItem("captiongrit_email") || "";
+                var k = (auth && auth.key) || localStorage.getItem("captiongrit_key") || "";
                 var url = "https://www.flogrit.com/captiongrit" + (e && k ? "?email=" + encodeURIComponent(e) + "&key=" + encodeURIComponent(k) : "") + "#pricing";
                 window.cep.util.openURLInDefaultBrowser(url);
             });
@@ -233,9 +234,10 @@
         bindButtons();
         updateDynamicHint(); // NEW: Initial hint render
 
-        var storedEmail = localStorage.getItem("captiongrit_email");
-        var storedKey = localStorage.getItem("captiongrit_key");
-        var storedDeviceId = getPersistentDeviceId();
+        var storedAuth = getStoredAuth();
+        var storedEmail = storedAuth.email;
+        var storedKey = storedAuth.key;
+        var storedDeviceId = storedAuth.deviceId;
 
         // Clear HTML failsafe since main.js loaded successfully
         if (typeof window.__clearLoadingFailsafe === "function") {
@@ -261,7 +263,7 @@
                 if (response.authenticated) {
                     window.CaptiongritSession = response;
                     TIER = window.CaptiongritSession.capabilities;
-                    localStorage.setItem(STORAGE_PREFIX + "auth_email", storedEmail);
+                    saveStoredAuth(storedEmail, storedKey, storedDeviceId);
                     localStorage.setItem(STORAGE_PREFIX + "capabilities", JSON.stringify(TIER));
                     showMainPanel(response.betaDaysLeft);
 
@@ -291,7 +293,7 @@
                         if (response.reason === "device_limit_reached") {
                             showError("Device limit reached for your plan. Contact support to transfer your license.");
                         } else if (response.reason === "beta_expired") {
-                            showError("Your 7-day Beta trial has expired.");
+                            showError("Your Beta trial has expired.");
                             if (document.getElementById("buyBtn")) document.getElementById("buyBtn").style.display = "block";
                             if (document.getElementById("activateBtn")) document.getElementById("activateBtn").style.display = "none";
                         } else {
@@ -674,11 +676,11 @@
         // Calculate upgrade price
         var pricing = {
             "basic-pro": { prefix: "Upgrade for just", price: "₹200" },
-            "basic-extreme": { prefix: "Upgrade for just", price: "₹600" },
-            "pro-extreme": { prefix: "Upgrade for just", price: "₹400" },
+            "basic-extreme": { prefix: "Status", price: "Coming Soon" },
+            "pro-extreme": { prefix: "Status", price: "Coming Soon" },
             "beta-basic": { prefix: "Starts at", price: "₹399" },
             "beta-pro": { prefix: "Starts at", price: "₹599" },
-            "beta-extreme": { prefix: "Starts at", price: "₹999" },
+            "beta-extreme": { prefix: "Status", price: "Coming Soon" },
             "beta-Premium": { prefix: "Starts at", price: "₹399" }
         };
         var priceKey = getPlanId() + "-" + requiredPlan;
@@ -692,8 +694,9 @@
         if (upgradeBtn) {
             upgradeBtn.onclick = function(e) {
                 e.preventDefault();
-                var email = localStorage.getItem("captiongrit_email") || "";
-                var key = localStorage.getItem("captiongrit_key") || "";
+                var auth = typeof getStoredAuth === "function" ? getStoredAuth() : null;
+                var email = (auth && auth.email) || localStorage.getItem("captiongrit_email") || "";
+                var key = (auth && auth.key) || localStorage.getItem("captiongrit_key") || "";
                 var url = "https://www.flogrit.com/captiongrit" + (email && key ? "?email=" + encodeURIComponent(email) + "&key=" + encodeURIComponent(key) : "") + "#pricing";
                 if (window.cep && window.cep.util) {
                     window.cep.util.openURLInDefaultBrowser(url);
@@ -1016,7 +1019,7 @@
         if (betaUpgradeBtn) {
             betaUpgradeBtn.addEventListener("click", function () {
                 if (getPlanId() === "beta") {
-                    showUpgradeModal("Premium", "Choose between the Basic and Pro plans to unlock full features and remove Beta limits.");
+                    showUpgradeModal("basic", "Choose between the Basic, Pro, or Extreme plans to remove Beta limits.");
                 }
             });
         }
@@ -1260,9 +1263,10 @@
         }
 
         // -- License re-validation (security: prevents console bypass) --
-        var _email = localStorage.getItem("captiongrit_email");
-        var _key = localStorage.getItem("captiongrit_key");
-        var _deviceId = getPersistentDeviceId();
+        var _auth = typeof getStoredAuth === "function" ? getStoredAuth() : null;
+        var _email = (_auth && _auth.email) || localStorage.getItem("captiongrit_email");
+        var _key = (_auth && _auth.key) || localStorage.getItem("captiongrit_key");
+        var _deviceId = (_auth && _auth.deviceId) || getPersistentDeviceId();
         if (!_email || !_key || !_deviceId) {
             showLicensePanel();
             showStatus("error", "License not found. Please activate your license.");
@@ -1272,9 +1276,22 @@
         // -- Tier enforcement: clip duration --
         for (var _c = 0; _c < currentClips.length; _c++) {
             if (TIER.maxDuration > 0 && currentClips[_c].duration > TIER.maxDuration) {
-                var nextPlan = getPlanId() === "basic" ? "Pro" : "Extreme";
-                showStatus("error", PLAN_LABELS[getPlanId()] + " plan supports up to " + TIER.maxDuration + "s per clip. Upgrade to " + nextPlan + " for longer clips.");
-                showUpgradeModal(getPlanId() === "basic" ? "pro" : "extreme", "Process clips up to " + (getPlanId() === "basic" ? "2 min 30 sec" : "unlimited") + " with " + nextPlan + ".");
+                var clipDur = currentClips[_c].duration;
+                var targetPlan = clipDur <= 60 ? "basic" : (clipDur <= 180 ? "pro" : "extreme");
+                var currentPlanLabel = PLAN_LABELS[getPlanId()] || "Current";
+                var targetPlanLabel = PLAN_LABELS[targetPlan] || "Target";
+                var durationMsg = TIER.maxDuration > 0 ? (TIER.maxDuration + "s") : "limited duration";
+                showStatus("error", currentPlanLabel + " plan supports up to " + durationMsg + " per clip. Upgrade to " + targetPlanLabel + " for longer clips.");
+
+                var modalDesc = "";
+                if (targetPlan === "basic") {
+                    modalDesc = "Process clips up to 60 seconds with the Basic plan (₹399).";
+                } else if (targetPlan === "pro") {
+                    modalDesc = "Process clips up to 3 minutes (180 seconds) with the Pro plan (₹599).";
+                } else {
+                    modalDesc = "Process unlimited clip durations with the Extreme plan (Coming Soon).";
+                }
+                showUpgradeModal(targetPlan, modalDesc);
                 return;
             }
         }
@@ -5098,7 +5115,12 @@
             if (getPlanId() === "beta" && betaDaysLeft !== undefined) {
                 betaIndicator.textContent = betaDaysLeft + " Days Left";
                 betaIndicator.style.display = "inline-block";
-                betaIndicator.style.cursor = "default";
+                betaIndicator.style.cursor = "pointer";
+                betaIndicator.onclick = function() {
+                    if (getPlanId() === "beta") {
+                        showUpgradeModal("basic", "Choose between the Basic, Pro, or Extreme plans to remove Beta limits.");
+                    }
+                };
                 if (betaUpgradeBtn) betaUpgradeBtn.style.display = "inline-block";
             } else {
                 betaIndicator.style.display = "none";
@@ -5125,40 +5147,69 @@
         }
     }
 
-    function getDeviceFingerprint() {
-        var str = "CAPTIONGRIT_FINGERPRINT";
-        // Use strict hardware/OS parameters that do not change on Premiere Pro updates or monitor changes
+    function getStaticMachineId() {
+        var id = null;
         try {
+            var cp = window.require ? window.require("child_process") : require("child_process");
             var os = window.require ? window.require("os") : require("os");
-            str += "|" + os.hostname() + "|" + os.platform() + "|" + os.arch();
-            var nics = os.networkInterfaces();
-            var macs = [];
-            for (var nicName in nics) {
-                if (nics.hasOwnProperty(nicName)) {
-                    for (var j = 0; j < nics[nicName].length; j++) {
-                        if (nics[nicName][j].mac && nics[nicName][j].mac !== "00:00:00:00:00:00") {
-                            macs.push(nics[nicName][j].mac);
-                        }
-                    }
+            var platform = os.platform();
+
+            if (platform === "win32") {
+                // Windows Registry MachineGuid: generated at OS installation, 100% stable across reboots/VPNs/Wi-Fi
+                var out = cp.execSync('reg query "HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Cryptography" /v MachineGuid', {
+                    encoding: "utf8",
+                    timeout: 3000,
+                    windowsHide: true
+                });
+                var match = out.match(/REG_SZ\s+([a-fA-F0-9-]+)/i);
+                if (match && match[1]) {
+                    id = "WIN-" + match[1].trim().toUpperCase();
+                }
+            } else if (platform === "darwin") {
+                // macOS IOPlatformUUID: hardware UUID burned into logic board/NVRAM
+                var out = cp.execSync("ioreg -rd1 -c IOPlatformExpertDevice", {
+                    encoding: "utf8",
+                    timeout: 3000
+                });
+                var match = out.match(/"IOPlatformUUID"\s*=\s*"([^"]+)"/i);
+                if (match && match[1]) {
+                    id = "MAC-" + match[1].trim().toUpperCase();
                 }
             }
-            if (macs.length > 0) {
-                macs.sort();
-                str += "|" + macs.join("|");
-            }
-        } catch (e) { /* Node.js not available — use browser-only fingerprint */ }
-        var hash = 0;
-        for (var i = 0; i < str.length; i++) {
-            var char = str.charCodeAt(i);
-            hash = ((hash << 5) - hash) + char;
-            hash = hash & hash;
+        } catch (e) {
+            console.warn("Captiongrit: Could not query OS hardware GUID:", e);
         }
-        return "DEVICE_" + Math.abs(hash).toString(16);
+        return id;
+    }
+
+    function getDeviceFingerprint() {
+        var hardwareId = getStaticMachineId();
+        if (hardwareId) {
+            try {
+                var crypto = window.require ? window.require("crypto") : require("crypto");
+                var hash = crypto.createHash("sha256").update("CAPTIONGRIT_" + hardwareId).digest("hex");
+                return "DEVICE_" + hash.substring(0, 16).toUpperCase();
+            } catch (e) {
+                // Fallback deterministic string hash if crypto module is unavailable
+                var str = "CAPTIONGRIT_" + hardwareId;
+                var h = 0;
+                for (var i = 0; i < str.length; i++) {
+                    h = ((h << 5) - h) + str.charCodeAt(i);
+                    h = h & h;
+                }
+                return "DEVICE_" + Math.abs(h).toString(16).toUpperCase();
+            }
+        }
+
+        // Stable fallback if OS hardware query is unsupported or fails
+        return "DEVICE_FB_" + Date.now().toString(16) + Math.random().toString(16).substring(2, 10).toUpperCase();
     }
 
     function getPersistentDeviceId() {
+        // Step 1: Check localStorage (preserve and reuse existing ID from v1.0.1)
         var deviceId = localStorage.getItem("captiongrit_device_id");
-        if (deviceId) {
+        if (deviceId && deviceId.trim()) {
+            deviceId = deviceId.trim();
             try {
                 var fs = window.require ? window.require("fs") : require("fs");
                 var os = window.require ? window.require("os") : require("os");
@@ -5171,10 +5222,13 @@
             return deviceId;
         }
 
+        // Step 2: Check persistent filesystem storage (preserve and reuse existing ID from v1.0.1)
         try {
             var fs = window.require ? window.require("fs") : require("fs");
             var os = window.require ? window.require("os") : require("os");
             var path = window.require ? window.require("path") : require("path");
+            
+            // Check .captiongrit_device_id
             var idFilePath = path.join(os.homedir(), ".captiongrit_device_id");
             if (fs.existsSync(idFilePath)) {
                 deviceId = fs.readFileSync(idFilePath, "utf8").trim();
@@ -5183,8 +5237,24 @@
                     return deviceId;
                 }
             }
+
+            // Check .captiongrit_auth.json
+            var authFilePath = path.join(os.homedir(), ".captiongrit_auth.json");
+            if (fs.existsSync(authFilePath)) {
+                var authObj = JSON.parse(fs.readFileSync(authFilePath, "utf8"));
+                if (authObj && authObj.deviceId) {
+                    deviceId = authObj.deviceId.trim();
+                    if (deviceId) {
+                        localStorage.setItem("captiongrit_device_id", deviceId);
+                        fs.writeFileSync(idFilePath, deviceId, "utf8");
+                        return deviceId;
+                    }
+                }
+            }
         } catch(e) {}
         
+        // Step 3: Brand new installation or clean machine with no previous device ID:
+        // Generate deterministic OS-level machine fingerprint (MachineGuid / IOPlatformUUID)
         deviceId = getDeviceFingerprint();
         localStorage.setItem("captiongrit_device_id", deviceId);
         
@@ -5199,13 +5269,102 @@
         return deviceId;
     }
 
-    async function validateLicense(email, licenseKey, deviceId) {
+    function getStoredAuth() {
+        var email = localStorage.getItem("captiongrit_email") || "";
+        var key = localStorage.getItem("captiongrit_key") || "";
+        var deviceId = getPersistentDeviceId();
+
+        // If credentials are missing in localStorage, restore from persistent backup file
+        if (!email || !key) {
+            try {
+                var fs = window.require ? window.require("fs") : require("fs");
+                var os = window.require ? window.require("os") : require("os");
+                var path = window.require ? window.require("path") : require("path");
+                var authFilePath = path.join(os.homedir(), ".captiongrit_auth.json");
+                if (fs.existsSync(authFilePath)) {
+                    var authData = JSON.parse(fs.readFileSync(authFilePath, "utf8"));
+                    if (authData && authData.email && authData.licenseKey) {
+                        email = authData.email.trim();
+                        key = authData.licenseKey.trim();
+                        if (authData.deviceId && !deviceId) {
+                            deviceId = authData.deviceId.trim();
+                        }
+                        // Restore into localStorage
+                        localStorage.setItem("captiongrit_email", email);
+                        localStorage.setItem("captiongrit_key", key);
+                        localStorage.setItem(STORAGE_PREFIX + "auth_email", email);
+                        if (deviceId) {
+                            localStorage.setItem("captiongrit_device_id", deviceId);
+                        }
+                    }
+                }
+            } catch (e) {}
+        }
+
+        return { email: email, key: key, deviceId: deviceId };
+    }
+
+    function saveStoredAuth(email, key, deviceId) {
+        if (email) localStorage.setItem("captiongrit_email", email);
+        if (key) localStorage.setItem("captiongrit_key", key);
+        if (deviceId) localStorage.setItem("captiongrit_device_id", deviceId);
+        if (email) localStorage.setItem(STORAGE_PREFIX + "auth_email", email);
+
+        try {
+            var fs = window.require ? window.require("fs") : require("fs");
+            var os = window.require ? window.require("os") : require("os");
+            var path = window.require ? window.require("path") : require("path");
+            
+            // Backup auth JSON
+            var authFilePath = path.join(os.homedir(), ".captiongrit_auth.json");
+            var authObj = {
+                email: email,
+                licenseKey: key,
+                deviceId: deviceId,
+                updatedAt: new Date().toISOString()
+            };
+            fs.writeFileSync(authFilePath, JSON.stringify(authObj, null, 2), "utf8");
+
+            // Ensure .captiongrit_device_id has deviceId
+            var idFilePath = path.join(os.homedir(), ".captiongrit_device_id");
+            if (deviceId) {
+                fs.writeFileSync(idFilePath, deviceId, "utf8");
+            }
+        } catch (e) {}
+    }
+
+    function clearStoredAuth() {
+        localStorage.removeItem("captiongrit_email");
+        localStorage.removeItem("captiongrit_key");
+        localStorage.removeItem("captiongrit_device_id");
+        localStorage.removeItem(STORAGE_PREFIX + "auth_email");
+        localStorage.removeItem(STORAGE_PREFIX + "capabilities");
+        localStorage.removeItem("captiongrit_licensed");
+
+        try {
+            var fs = window.require ? window.require("fs") : require("fs");
+            var os = window.require ? window.require("os") : require("os");
+            var path = window.require ? window.require("path") : require("path");
+            var authFilePath = path.join(os.homedir(), ".captiongrit_auth.json");
+            if (fs.existsSync(authFilePath)) {
+                fs.unlinkSync(authFilePath);
+            }
+            var idFilePath = path.join(os.homedir(), ".captiongrit_device_id");
+            if (fs.existsSync(idFilePath)) {
+                fs.unlinkSync(idFilePath);
+            }
+        } catch (e) {}
+    }
+
+    async function validateLicense(email, licenseKey, deviceId, isRefresh) {
         try {
             console.log("validateLicense: Starting request...");
+            var reqObj = { email: email, licenseKey: licenseKey, deviceId: deviceId };
+            if (isRefresh) reqObj.isRefresh = true;
             var resp = await fetchWithTimeout(LICENSE_URL, {
                 method: "POST",
                 headers: { "Content-Type": "text/plain" },
-                body: JSON.stringify({ email: email, licenseKey: licenseKey, deviceId: deviceId }),
+                body: JSON.stringify(reqObj),
                 redirect: "follow"
             }, 15000);
             console.log("validateLicense: Response status = " + resp.status);
@@ -5228,18 +5387,39 @@
         }
     }
 
+    async function switchDevice(email, licenseKey, deviceId) {
+        try {
+            console.log("switchDevice: Sending switch_device request...");
+            var resp = await fetchWithTimeout(LICENSE_URL, {
+                method: "POST",
+                headers: { "Content-Type": "text/plain" },
+                body: JSON.stringify({ action: "switch_device", email: email, licenseKey: licenseKey, deviceId: deviceId }),
+                redirect: "follow"
+            }, 20000);
+            if (resp.ok) {
+                var text = await resp.text();
+                return JSON.parse(text);
+            }
+            return { valid: false, authenticated: false, reason: "network_error" };
+        } catch (e) {
+            return { valid: false, authenticated: false, reason: "network_error", message: e.message };
+        }
+    }
+
     // Refresh license silently when user switches back to Premiere (e.g., after upgrading in browser)
     async function refreshLicenseState() {
-        var storedEmail = localStorage.getItem("captiongrit_email");
-        var storedKey = localStorage.getItem("captiongrit_key");
-        var storedDeviceId = getPersistentDeviceId();
+        var auth = getStoredAuth();
+        var storedEmail = auth.email;
+        var storedKey = auth.key;
+        var storedDeviceId = auth.deviceId;
 
         if (storedEmail && storedKey && storedDeviceId) {
             try {
-                var response = await validateLicense(storedEmail, storedKey, storedDeviceId);
+                var response = await validateLicense(storedEmail, storedKey, storedDeviceId, true);
                 if (response.authenticated) {
                     window.CaptiongritSession = response;
                     TIER = window.CaptiongritSession.capabilities;
+                    saveStoredAuth(storedEmail, storedKey, storedDeviceId);
                     localStorage.setItem(STORAGE_PREFIX + "capabilities", JSON.stringify(TIER));
                     
                     var badge = document.getElementById("plan-badge");
@@ -5274,6 +5454,11 @@
 
                     // Attempt to close upgrade modal if it was open
                     hideUpgradeModal();
+                } else if (response.reason === "device_not_authorized" || response.reason === "license_deactivated" || response.reason === "license_expired") {
+                    console.warn("Session revoked by server:", response.reason);
+                    clearStoredAuth();
+                    showLicensePanel();
+                    showError("Your license was activated on another device. Please log in again.");
                 }
             } catch (err) {
                 // Ignore silent network errors during background refresh
@@ -5288,7 +5473,7 @@
 
     async function checkForUpdates() {
         try {
-            var CURRENT_VERSION = "1.0.2";
+            var CURRENT_VERSION = "1.0.3";
             var statusEl = document.getElementById("settings-update-status");
             var settingsBtn = document.getElementById("btn-settings-download-update");
 
@@ -5384,6 +5569,36 @@
         localStorage.setItem("captiongrit_migrated", "1");
     }
 
+    var _pendingDeviceSwitch = null;
+
+    function showDeviceSwitchCard(email, key, deviceId, maxDevices) {
+        _pendingDeviceSwitch = { email: email, key: key, deviceId: deviceId };
+        var card = document.getElementById("device-switch-card");
+        var title = document.getElementById("device-switch-title");
+        var desc = document.getElementById("device-switch-desc");
+        var btnConfirm = document.getElementById("btn-confirm-device-switch");
+
+        if (maxDevices > 1) {
+            if (title) title.textContent = "All device slots are in use";
+            if (desc) desc.textContent = "Your subscription has reached its device limit. Continuing will remove the oldest active device and activate this device.";
+            if (btnConfirm) btnConfirm.textContent = "Switch to this device";
+        } else {
+            if (title) title.textContent = "License active on another device";
+            if (desc) desc.textContent = "Your license is currently active on another device. You can log out from that device and continue here.";
+            if (btnConfirm) btnConfirm.textContent = "Log out from other device & continue";
+        }
+
+        if (card) card.style.display = "block";
+        var err = document.getElementById("errorMsg");
+        if (err) err.className = "status-msg";
+    }
+
+    function hideDeviceSwitchCard() {
+        _pendingDeviceSwitch = null;
+        var card = document.getElementById("device-switch-card");
+        if (card) card.style.display = "none";
+    }
+
     async function handleActivateClick() {
         var emailInput = document.getElementById("emailInput");
         var licenseInput = document.getElementById("licenseInput");
@@ -5406,13 +5621,11 @@
             var response = await validateLicense(email, key, deviceId);
             console.log("Activation response:", JSON.stringify(response));
             if (response.authenticated) {
+                hideDeviceSwitchCard();
                 window.CaptiongritSession = response;
                 TIER = window.CaptiongritSession.capabilities;
 
-                localStorage.setItem("captiongrit_device_id", deviceId);
-                localStorage.setItem("captiongrit_email", email);
-                localStorage.setItem("captiongrit_key", key);
-                localStorage.setItem(STORAGE_PREFIX + "auth_email", email);
+                saveStoredAuth(email, key, deviceId);
                 localStorage.setItem(STORAGE_PREFIX + "capabilities", JSON.stringify(TIER));
                 localStorage.removeItem("captiongrit_licensed");
 
@@ -5423,9 +5636,11 @@
                 showMainPanel(response.betaDaysLeft);
             } else {
                 if (response.reason === "device_limit_reached") {
-                    showError("This license is already activated on the maximum number of devices. Contact support to transfer your license.");
+                    showDeviceSwitchCard(email, key, deviceId, response.maxDevices || 1);
+                } else if (response.reason === "device_not_authorized") {
+                    showError("Your license was activated on another device. Please log in again.");
                 } else if (response.reason === "beta_expired") {
-                    showError("Your 7-day Beta trial has expired.");
+                    showError("Your Beta trial has expired.");
                     if (document.getElementById("buyBtn")) document.getElementById("buyBtn").style.display = "block";
                     if (document.getElementById("activateBtn")) document.getElementById("activateBtn").style.display = "none";
                 } else if (response.reason === "network_error") {
@@ -5440,12 +5655,59 @@
         }
     }
 
+    // Bind Device Switch Card Action Buttons
+    var btnConfirmSwitch = document.getElementById("btn-confirm-device-switch");
+    if (btnConfirmSwitch) {
+        btnConfirmSwitch.onclick = async function () {
+            if (!_pendingDeviceSwitch) return;
+            btnConfirmSwitch.disabled = true;
+            btnConfirmSwitch.textContent = "Switching device...";
+            try {
+                var response = await switchDevice(_pendingDeviceSwitch.email, _pendingDeviceSwitch.key, _pendingDeviceSwitch.deviceId);
+                if (response.authenticated) {
+                    var email = _pendingDeviceSwitch.email;
+                    var key = _pendingDeviceSwitch.key;
+                    var deviceId = _pendingDeviceSwitch.deviceId;
+                    hideDeviceSwitchCard();
+
+                    window.CaptiongritSession = response;
+                    TIER = window.CaptiongritSession.capabilities;
+
+                    saveStoredAuth(email, key, deviceId);
+                    localStorage.setItem(STORAGE_PREFIX + "capabilities", JSON.stringify(TIER));
+                    localStorage.removeItem("captiongrit_licensed");
+
+                    applyFeatureGating();
+                    if (TIER.hasPresets) initPresets();
+
+                    showMainPanel(response.betaDaysLeft);
+                } else {
+                    showError("Device switch failed: " + (response.reason || "unknown error"));
+                }
+            } catch (e) {
+                showError("Device switch failed: " + e.message);
+            } finally {
+                btnConfirmSwitch.disabled = false;
+            }
+        };
+    }
+
+    var btnCancelSwitch = document.getElementById("btn-cancel-device-switch");
+    if (btnCancelSwitch) {
+        btnCancelSwitch.onclick = function () {
+            hideDeviceSwitchCard();
+            var err = document.getElementById("errorMsg");
+            if (err) err.className = "status-msg";
+        };
+    }
+
 
     function deactivateLicense() {
         // Fire-and-forget: tell the backend to free this device seat
-        var email = localStorage.getItem("captiongrit_email");
-        var key = localStorage.getItem("captiongrit_key");
-        var deviceId = getPersistentDeviceId();
+        var auth = getStoredAuth();
+        var email = auth.email;
+        var key = auth.key;
+        var deviceId = auth.deviceId;
         if (email && key && deviceId) {
             try {
                 fetchWithTimeout(LICENSE_URL, {
@@ -5474,21 +5736,7 @@
             capabilities: { maxDuration: 30, maxDevices: 1, maxClips: 1, hasDoubleCheck: false, hasEditor: false, hasCustomDict: false, hasWordByWord: false, hasFullSentence: true, hasEnglishOutput: false, hasPresets: false, hasMogrt: false, hasBatch: false }
         };
         TIER = window.CaptiongritSession.capabilities;
-        localStorage.removeItem("captiongrit_licensed");
-        localStorage.removeItem(STORAGE_PREFIX + "auth_email");
-        localStorage.removeItem(STORAGE_PREFIX + "capabilities");
-        localStorage.removeItem("captiongrit_email");
-        localStorage.removeItem("captiongrit_key");
-        localStorage.removeItem("captiongrit_device_id");
-        try {
-            var fs = window.require ? window.require("fs") : require("fs");
-            var os = window.require ? window.require("os") : require("os");
-            var path = window.require ? window.require("path") : require("path");
-            var idFilePath = path.join(os.homedir(), ".captiongrit_device_id");
-            if (fs.existsSync(idFilePath)) {
-                fs.unlinkSync(idFilePath);
-            }
-        } catch(e) {}
+        clearStoredAuth();
         showLicensePanel();
     }
 

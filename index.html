@@ -61,6 +61,23 @@
             </div>
 
             <button class="btn btn-primary" id="activateBtn">Activate License</button>
+
+            <!-- ═══════════ DEVICE SWITCH CONFIRMATION ═══════════ -->
+            <div id="device-switch-card" style="display: none; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px; padding: 14px; margin-top: 12px; text-align: left;">
+                <div style="font-weight: 600; font-size: 13px; color: var(--accent); margin-bottom: 6px;" id="device-switch-title">
+                    License active on another device
+                </div>
+                <div style="font-size: 11px; color: var(--text-secondary, #ccc); margin-bottom: 12px; line-height: 1.4;" id="device-switch-desc">
+                    Your subscription is currently active on another device. You can log out from the other device and continue here.
+                </div>
+                <button class="btn btn-primary" id="btn-confirm-device-switch" style="margin-bottom: 8px;">
+                    Log out from other device & continue
+                </button>
+                <button class="btn btn-sm" id="btn-cancel-device-switch" style="width: 100%; opacity: 0.7; background: transparent; border: 1px solid rgba(255,255,255,0.15); color: #fff;">
+                    Cancel
+                </button>
+            </div>
+
             <button class="btn btn-primary" id="buyBtn"
                 style="display:none; margin-top:8px; background:var(--accent); color:#111;">🚀 Buy Full Version</button>
 
@@ -86,7 +103,7 @@
                     style="display:none; background:var(--danger); margin-left:4px; white-space:nowrap;"></span>
                 <button class="btn btn-primary" id="beta-upgrade-btn" style="display:none; margin-left:auto; width:auto; font-size:10px; padding:4px 10px; border-radius:12px; border:none; cursor:pointer; flex:none; white-space:nowrap; align-self:center;">Upgrade Now</button>
             </div>
-            <span class="version">v1.0.2</span>
+            <span class="version">v1.0.3</span>
         </div>
 
         <!-- ═══════════ Tab Bar ═══════════ -->

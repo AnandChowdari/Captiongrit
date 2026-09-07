@@ -1,3 +1,970 @@
+
+var lockAcquired = false;
+var sheetsDb = { Transactions: [], Basic: [], Pro: [], Extreme: [], Beta: [] };
+var logBuffer = [];
+var emailFailures = 0;
+var emailDispatches = 0;
+
+var LockService = {
+  getScriptLock: () => ({
+    waitLock: (time) => { if (lockAcquired) throw new Error("CONCURRENCY_ERROR: Could not acquire script lock."); lockAcquired = true; },
+    releaseLock: () => { lockAcquired = false; }
+  })
+};
+
+var SpreadsheetApp = {
+  openByUrl: () => ({
+    getSheetByName: (name) => name
+  })
+};
+
+var PLAN_CONFIG = { basic: { sheetName: "Basic", maxDevices: 1 }, pro: { sheetName: "Pro", maxDevices: 1 }, extreme: { sheetName: "Extreme", maxDevices: 3 } };
+var PropertiesService = { getScriptProperties: () => ({ getProperty: () => "secret" }) };
+var ADMIN_SECRET = "secret";
+var TRANSACTIONS_TAB_NAME = "Transactions";
+var DEFAULT_HEADERS = [];
+var TRANSACTIONS_HEADERS = [];
+var SPREADSHEET_URL = "test";
+
+var Logger = { log: (msg) => { logBuffer.push(msg); } };
+
+function jsonResponse(obj) { return obj; }
+function ensureTabExists(ss, name) { return name; }
+function validateSheetHeaders() { return []; }
+
+function findTransactionByPaymentId(sheetName, pId) {
+  const row = sheetsDb["Transactions"].find(r => r.paymentId === pId);
+  return row ? { ...row } : null;
+}
+
+function findUserInSpecificTab(ss, plan, email) {
+  if (!PLAN_CONFIG[plan]) return null;
+  const sheetName = PLAN_CONFIG[plan].sheetName;
+  const row = sheetsDb[sheetName].find(r => r.email === email);
+  if (row) return { key: row.license_key, colMap: { email_status: "email_status" }, rowData: { email_status: row.email_status } };
+  return null;
+}
+
+function findUserAcrossTabs(ss, email, key) {
+  for (const plan in PLAN_CONFIG) {
+    const sheetName = PLAN_CONFIG[plan].sheetName;
+    const row = sheetsDb[sheetName].find(r => r.email === email && (!key || r.license_key === key));
+    if (row) return { key: row.license_key, sheet: { getName: () => sheetName, deleteRow: (idx) => { sheetsDb[sheetName].splice(idx, 1); } }, rowIndex: sheetsDb[sheetName].indexOf(row), colMap: { plan: "plan", license_key: "license_key", activated_devices: "activated_devices" }, rowData: { plan: row.plan, license_key: row.license_key, activated_devices: row.activated_devices } };
+  }
+  return null;
+}
+
+function appendToPlanTab(ss, plan, obj) { sheetsDb[PLAN_CONFIG[plan].sheetName].push(obj); }
+function verifySubscriptionWriteBack(ss, plan, email) { return sheetsDb[PLAN_CONFIG[plan].sheetName].find(r => r.email === email); }
+function appendTransactionLog(sheetName, obj) { sheetsDb["Transactions"].push(obj); }
+function updateTransactionAction(sheetName, pId, action) { const row = sheetsDb["Transactions"].find(r => r.paymentId === pId); if (row) row.actionTaken = action; }
+function generateLicenseKey() { return "CG-GEN-" + Math.floor(Math.random()*1000); }
+
+// Simulate slow synchronous MailApp!
+function sendLicenseEmail(email, name, plan, key) {
+  emailDispatches++;
+  if (emailFailures > 0) {
+    emailFailures--;
+    throw new Error("Simulated MailApp Failure");
+  }
+  
+  // To simulate concurrency during email sending, we will trigger a background payload 
+  // if one is queued up.
+  if (global.concurrentPayload) {
+      console.log("    [Triggering concurrent payload while email is sending...]");
+      let p = global.concurrentPayload;
+      global.concurrentPayload = null;
+      try {
+          handlePaidSignup(p, null);
+      } catch(e) {
+          global.concurrentError = e;
+      }
+  }
+
+}
+
+function updateEmailStatusInSheets(ss, email, paymentId, newStatus) {
+  for (const plan in PLAN_CONFIG) {
+    const row = sheetsDb[PLAN_CONFIG[plan].sheetName].find(r => r.email === email);
+    if (row) row.email_status = newStatus;
+  }
+  const tRow = sheetsDb.Transactions.find(r => r.paymentId === paymentId);
+  if (tRow) tRow.email_status = newStatus;
+}
+
+function handlePaidSignup(payload, ss) {
+  if (payload.secret !== ADMIN_SECRET) {
+    return jsonResponse({ status: "error", code: "UNAUTHORIZED", message: "Invalid or missing secret token." });
+  }
+
+  var pd = payload.data || {};
+  var paymentId = (pd.paymentId || "").trim();
+  var email = (pd.email || "").trim().toLowerCase();
+  var plan = (pd.plan || "").trim().toLowerCase();
+  var payloadLicenseKey = (pd.licenseKey || "").trim();
+
+  if (!paymentId || !email || !plan || (!payloadLicenseKey && !pd.isRecovery)) {
+    return jsonResponse({ status: "error", code: "INVALID_PAYLOAD", message: "Missing required fields." });
+  }
+
+  if (!PLAN_CONFIG[plan]) {
+    return jsonResponse({ status: "error", code: "INVALID_PLAN", message: "Unrecognized plan: " + plan });
+  }
+
+  // 1. Schema Validation (Fail Fast if mandatory headers missing) - OUTSIDE LOCK
+  var planConfig = PLAN_CONFIG[plan];
+  var targetSheet = ensureTabExists(ss, planConfig.sheetName, DEFAULT_HEADERS);
+  var missingHeaders = validateSheetHeaders(targetSheet, DEFAULT_HEADERS);
+  if (missingHeaders.length > 0) {
+    Logger.log("CRITICAL SCHEMA ERROR: Sheet '" + planConfig.sheetName + "' is missing headers: " + missingHeaders.join(", "));
+    return jsonResponse({ status: "error", code: "SCHEMA_ERROR", message: "Database schema header missing: " + missingHeaders[0] });
+  }
+
+  var transSheet = ensureTabExists(ss, TRANSACTIONS_TAB_NAME, TRANSACTIONS_HEADERS);
+
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(20000);
+  } catch (e) {
+    return jsonResponse({ status: "error", code: "CONCURRENCY_ERROR", message: "Server busy. Please try again." });
+  }
+
+  var fulfillmentState = ""; // A, B, C, D, E
+  var finalKey = payloadLicenseKey;
+  var actionTaken = "";
+  var targetSubMatch = null;
+  var transMatch = null;
+
+  try {
+    transMatch = findTransactionByPaymentId(transSheet, paymentId);
+    targetSubMatch = findUserInSpecificTab(ss, plan, email);
+
+    // STATE E / H: Already Fully Provisioned
+    if (targetSubMatch && transMatch && transMatch.email_status === "sent") {
+      fulfillmentState = "E";
+      finalKey = targetSubMatch.key;
+    }
+    // STATE D: Email Delivery Pending or Failed or Resend Requested
+    else if (targetSubMatch && transMatch && (transMatch.email_status === "failed" || transMatch.email_status === "pending" || pd.resendEmail === true)) {
+      fulfillmentState = "D";
+      finalKey = targetSubMatch.key;
+    }
+    // STATE B: Subscription Exists in Target Tab, Transaction Record Missing
+    else if (targetSubMatch && !transMatch) {
+      fulfillmentState = "B";
+      finalKey = targetSubMatch.key;
+      appendTransactionLog(transSheet, {
+        transactionId: pd.transactionId || "",
+        paymentId: paymentId,
+        orderId: pd.orderId || "",
+        email: email,
+        plan: plan,
+        amount: pd.amount || "",
+        currency: pd.currency || "",
+        timestamp: pd.timestamp || new Date().toISOString(),
+        status: "success",
+        licenseKey: finalKey,
+        actionTaken: "repaired_transaction",
+        email_status: "pending"
+      });
+    }
+    // STATE C: Transaction Exists, but Subscription Row Missing in Target Tab
+    else if (!targetSubMatch && transMatch) {
+      fulfillmentState = "C";
+      finalKey = transMatch.licenseKey || payloadLicenseKey;
+      var planToUseC = transMatch.plan || plan;
+
+      if (!finalKey) {
+        throw new Error("UNVERIFIED_LICENSE_KEY: Original license key missing in transaction record.");
+      }
+
+      var lowerMatchC = findUserAcrossTabs(ss, email);
+      var oldDevicesC = lowerMatchC ? (lowerMatchC.rowData[lowerMatchC.colMap["activated_devices"]] || "[]").toString().trim() : "[]";
+      var maxDevicesC = PLAN_CONFIG[planToUseC].maxDevices;
+      
+      var newRowObjC = {
+        name: pd.name || (transMatch.name || "User"),
+        email: email,
+        license_key: finalKey,
+        plan: planToUseC,
+        status: "active",
+        activated_devices: oldDevicesC,
+        max_devices: maxDevicesC,
+        expiry: "",
+        email_status: "pending"
+      };
+
+      appendToPlanTab(ss, planToUseC, newRowObjC);
+
+      var verifiedObjC = verifySubscriptionWriteBack(ss, planToUseC, email);
+      if (!verifiedObjC) {
+        throw new Error("Write-back verification assertion failed for plan " + planToUseC);
+      }
+
+      if (lowerMatchC && lowerMatchC.sheet.getName() !== PLAN_CONFIG[planToUseC].sheetName) {
+        lowerMatchC.sheet.deleteRow(lowerMatchC.rowIndex);
+      }
+
+      updateTransactionAction(transSheet, paymentId, "repaired_fulfillment");
+    }
+    // STATE A: Clean New Signup / Beta Upgrade (Both Sub and Trans Missing)
+    else {
+      fulfillmentState = "A";
+      var userMatch = findUserAcrossTabs(ss, email, payloadLicenseKey) || findUserAcrossTabs(ss, email);
+      actionTaken = "created_new";
+      var oldDevices = "[]";
+
+      if (userMatch) {
+        var rowPlan = (userMatch.rowData[userMatch.colMap["plan"]] || "").toString().trim().toLowerCase();
+        var oldKey = (userMatch.rowData[userMatch.colMap["license_key"]] || "").toString().trim();
+
+        if (rowPlan === plan) {
+          actionTaken = "already_owned";
+          finalKey = oldKey || payloadLicenseKey;
+        } else {
+          actionTaken = "upgraded_existing";
+          finalKey = oldKey || payloadLicenseKey;
+          oldDevices = (userMatch.rowData[userMatch.colMap["activated_devices"]] || "[]").toString().trim();
+        }
+      }
+
+      var maxDevices = planConfig.maxDevices;
+      var newRowObj = {
+        name: pd.name || "User",
+        email: email,
+        license_key: finalKey,
+        plan: plan,
+        status: "active",
+        activated_devices: oldDevices,
+        max_devices: maxDevices,
+        expiry: "",
+        email_status: "pending"
+      };
+
+      appendToPlanTab(ss, plan, newRowObj);
+
+      var verifiedObj = verifySubscriptionWriteBack(ss, plan, email);
+      if (!verifiedObj) {
+        throw new Error("Write-back verification assertion failed for plan " + plan);
+      }
+
+      if (userMatch && userMatch.sheet.getName() !== planConfig.sheetName) {
+        userMatch.sheet.deleteRow(userMatch.rowIndex);
+      }
+
+      appendTransactionLog(transSheet, {
+        transactionId: pd.transactionId || "",
+        paymentId: paymentId,
+        orderId: pd.orderId || "",
+        email: email,
+        plan: plan,
+        amount: pd.amount || "",
+        currency: pd.currency || "",
+        timestamp: pd.timestamp || new Date().toISOString(),
+        status: "success",
+        licenseKey: finalKey,
+        actionTaken: actionTaken,
+        email_status: "pending"
+      });
+    }
+  } catch (criticalErr) {
+    if (criticalErr.message.indexOf("UNVERIFIED_LICENSE_KEY") > -1) {
+      return jsonResponse({ status: "error", code: "UNVERIFIED_LICENSE_KEY", message: "Admin investigation required." });
+    }
+    throw criticalErr; // Unhandled sheet errors
+  } finally {
+    // ALWAYS release lock immediately after authoritative duplicate check and writes
+    lock.releaseLock();
+  }
+
+  // 3. Unlocked Email Dispatch and final JSON response
+  if (fulfillmentState === "E") {
+    return jsonResponse({
+      status: "success",
+      code: "ALREADY_FULFILLED",
+      message: "Subscription already fully active.",
+      data: { email: email, plan: plan, licenseKey: finalKey, emailSent: true }
+    });
+  }
+
+  // State A, B, C, D requires email to be sent/retried OUTSIDE the lock
+  var emailSuccess = false;
+  try {
+    sendLicenseEmail(email, pd.name || "User", plan, finalKey);
+    emailSuccess = true;
+    updateEmailStatusInSheetsLock(ss, email, paymentId, "sent");
+  } catch (emailErr) {
+    Logger.log("Email delivery failed for " + email + ": " + emailErr);
+    updateEmailStatusInSheetsLock(ss, email, paymentId, "failed");
+  }
+
+  var responseCode = "";
+  var responseMsg = "";
+
+  if (fulfillmentState === "B") {
+    responseCode = "TRANS_REPAIRED";
+    responseMsg = "Transaction log repaired.";
+  } else if (fulfillmentState === "C") {
+    responseCode = "SUB_REPAIRED";
+    responseMsg = "Subscription fulfillment repaired.";
+  } else if (fulfillmentState === "D") {
+    responseCode = "EMAIL_RETRY";
+    responseMsg = emailSuccess ? "Welcome email resent." : "Email resend failed.";
+  } else {
+    responseCode = "NEW_SIGNUP";
+    responseMsg = "Payment recorded and fulfillment verified.";
+  }
+
+  var responseData = { email: email, plan: plan, licenseKey: finalKey, emailSent: emailSuccess, emailStatus: emailSuccess ? "sent" : "failed" };
+  if (actionTaken) responseData.actionTaken = actionTaken;
+
+  var responsePayload = {
+    status: "success",
+    message: responseMsg,
+    data: responseData
+  };
+  if (responseCode) responsePayload.code = responseCode;
+
+  return jsonResponse(responsePayload);
+}
+
+
+function updateEmailStatusInSheetsLock(ss, email, paymentId, newStatus) {
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(10000);
+    updateEmailStatusInSheets(ss, email, paymentId, newStatus);
+  } catch (e) {
+    Logger.log("Could not acquire lock to update email status to " + newStatus + " for " + email);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function handleBetaSignup(data, ss) {
+  var newEmail = (data.email || "").trim().toLowerCase();
+  var name = (data.name || "Beta User").trim();
+
+  if (!newEmail) {
+    return jsonResponse({ success: false, reason: "missing_email" });
+  }
+
+  if (findUserAcrossTabs(ss, newEmail)) {
+    return jsonResponse({ success: false, reason: "already_registered" });
+  }
+
+  var plan = "beta";
+  var key = generateLicenseKey();
+
+  var newRowObj = {
+    name: name,
+    email: newEmail,
+    license_key: key,
+    plan: plan,
+    status: "active",
+    activated_devices: "[]",
+    max_devices: PLAN_CONFIG[plan].maxDevices,
+    expiry: "" // Will be set on first login
+  };
+
+  appendToPlanTab(ss, plan, newRowObj);
+  sendBetaEmail(newEmail, name, key);
+
+  return jsonResponse({ success: true, email: newEmail });
+}
+
+function handleGenerate(data, ss) {
+  if (data.adminSecret !== ADMIN_SECRET) {
+    return jsonResponse({ success: false, reason: "unauthorized" });
+  }
+
+  var newEmail = (data.email || "").trim().toLowerCase();
+  var plan = (data.plan || "basic").trim().toLowerCase();
+  var name = (data.name || "User").trim();
+
+  if (!newEmail || !plan || !PLAN_CONFIG[plan]) {
+    return jsonResponse({ success: false, reason: "missing_or_invalid_fields" });
+  }
+
+  if (findUserAcrossTabs(ss, newEmail)) {
+    return jsonResponse({ success: false, reason: "already_registered" });
+  }
+
+  var key = generateLicenseKey();
+  var maxDevices = PLAN_CONFIG[plan].maxDevices;
+
+  var newRowObj = {
+    name: name,
+    email: newEmail,
+    license_key: key,
+    plan: plan,
+    status: "active",
+    activated_devices: "[]",
+    max_devices: maxDevices,
+    expiry: ""
+  };
+
+  appendToPlanTab(ss, plan, newRowObj);
+  sendLicenseEmail(newEmail, name, plan, key);
+
+  return jsonResponse({ success: true, email: newEmail, key: key, plan: plan });
+}
+
+function handleVerify(data, ss) {
+  var email = (data.email || "").trim().toLowerCase();
+  var licenseKey = (data.licenseKey || "").trim();
+  var deviceId = (data.deviceId || "").trim();
+
+  if (!email || !licenseKey) {
+    return jsonResponse({ valid: false, reason: "missing_fields" });
+  }
+
+  var userMatch = findUserAcrossTabs(ss, email, licenseKey);
+
+  if (!userMatch) {
+    return jsonResponse({ valid: false, reason: "invalid_license" });
+  }
+
+  var row = userMatch.rowData;
+  var sheet = userMatch.sheet;
+  var rowIndex = userMatch.rowIndex;
+  var COL = userMatch.colMap;
+
+  var rowPlan = (row[COL["plan"]] || "basic").toString().trim().toLowerCase();
+  var rowActive = (row[COL["status"]] || "").toString().trim().toLowerCase();
+  var rowDevicesStr = (row[COL["activated_devices"]] || "[]").toString();
+  var rowMaxDevices = parseInt(row[COL["max_devices"]]) || 1;
+  var rowExpiry = COL["expiry"] !== undefined ? row[COL["expiry"]] : null;
+
+  if (rowActive !== "active") {
+    return jsonResponse({ valid: false, reason: "license_deactivated" });
+  }
+
+  var today = new Date();
+  var daysLeft = undefined;
+
+  // Beta Expiry Logic
+  if (rowPlan === "beta") {
+    if (!rowExpiry) {
+      var expiryDate = new Date();
+      expiryDate.setDate(today.getDate() + BETA_DURATION_DAYS);
+      if (COL["expiry"] !== undefined) {
+        sheet.getRange(rowIndex, COL["expiry"] + 1).setValue(expiryDate.toISOString());
+      }
+      rowExpiry = expiryDate;
+    }
+    var exp = new Date(rowExpiry);
+    if (exp < today) {
+      return jsonResponse({ valid: false, reason: "beta_expired" });
+    }
+    daysLeft = Math.ceil((exp.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  } else if (rowExpiry) {
+    // Normal expiry check
+    var expiryDate = new Date(rowExpiry);
+    if (expiryDate < today) {
+      return jsonResponse({ valid: false, reason: "license_expired" });
+    }
+  }
+
+  var devices = [];
+  try {
+    devices = JSON.parse(rowDevicesStr);
+    if (!Array.isArray(devices)) devices = [];
+  } catch (pe) {
+    devices = [];
+  }
+
+  var deviceIndex = devices.indexOf(deviceId);
+
+  var planConfig = PLAN_CONFIG[rowPlan] || PLAN_CONFIG["basic"];
+
+  if (deviceIndex >= 0) {
+    return jsonResponse({
+      authenticated: true,
+      user: {
+        email: email,
+        plan: rowPlan,
+        license: licenseKey,
+        expires: rowExpiry ? rowExpiry : "never",
+        lastValidated: new Date().toISOString()
+      },
+      capabilities: planConfig,
+      maxDevices: rowMaxDevices,
+      deviceCount: devices.length,
+      betaDaysLeft: (typeof daysLeft !== 'undefined') ? Math.max(0, daysLeft) : undefined
+    });
+  }
+
+  // New device check
+  if (devices.length >= rowMaxDevices) {
+    if (data.isRefresh === true || data.isStoredAuth === true) {
+      return jsonResponse({
+        valid: false,
+        reason: "device_not_authorized",
+        plan: rowPlan,
+        maxDevices: rowMaxDevices,
+        currentDevices: devices.length
+      });
+    }
+    return jsonResponse({
+      valid: false,
+      reason: "device_limit_reached",
+      canSwitch: true,
+      plan: rowPlan,
+      maxDevices: rowMaxDevices,
+      currentDevices: devices.length
+    });
+  }
+
+  // Register device
+  devices.push(deviceId);
+  sheet.getRange(rowIndex, COL["activated_devices"] + 1).setValue(JSON.stringify(devices));
+  if (COL["device_id"] !== undefined) {
+    sheet.getRange(rowIndex, COL["device_id"] + 1).setValue(devices.join(","));
+  }
+
+  return jsonResponse({
+    authenticated: true,
+    user: {
+      email: email,
+      plan: rowPlan,
+      license: licenseKey,
+      expires: rowExpiry ? rowExpiry : "never",
+      lastValidated: new Date().toISOString()
+    },
+    capabilities: planConfig,
+    maxDevices: rowMaxDevices,
+    deviceCount: devices.length,
+    betaDaysLeft: (typeof daysLeft !== 'undefined') ? Math.max(0, daysLeft) : undefined
+  });
+}
+
+function handleSwitchDevice(data, ss) {
+  var email = (data.email || "").trim().toLowerCase();
+  var licenseKey = (data.licenseKey || "").trim();
+  var deviceId = (data.deviceId || "").trim();
+
+  if (!email || !licenseKey || !deviceId) {
+    return jsonResponse({ valid: false, reason: "missing_fields" });
+  }
+
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(15000);
+  } catch (e) {
+    return jsonResponse({ valid: false, reason: "server_busy", message: "Server busy. Please try again." });
+  }
+
+  try {
+    // 1. Re-validate email + license key
+    var userMatch = findUserAcrossTabs(ss, email, licenseKey);
+    if (!userMatch) {
+      return jsonResponse({ valid: false, reason: "invalid_license" });
+    }
+
+    var row = userMatch.rowData;
+    var sheet = userMatch.sheet;
+    var rowIndex = userMatch.rowIndex;
+    var COL = userMatch.colMap;
+
+    var rowPlan = (row[COL["plan"]] || "basic").toString().trim().toLowerCase();
+    var rowActive = (row[COL["status"]] || "").toString().trim().toLowerCase();
+    var rowDevicesStr = (row[COL["activated_devices"]] || "[]").toString();
+    var rowMaxDevices = parseInt(row[COL["max_devices"]]) || 1;
+    var rowExpiry = COL["expiry"] !== undefined ? row[COL["expiry"]] : null;
+
+    if (rowActive !== "active") {
+      return jsonResponse({ valid: false, reason: "license_deactivated" });
+    }
+
+    var today = new Date();
+    var daysLeft = undefined;
+
+    if (rowPlan === "beta") {
+      if (!rowExpiry) {
+        var expiryDate = new Date();
+        expiryDate.setDate(today.getDate() + BETA_DURATION_DAYS);
+        if (COL["expiry"] !== undefined) {
+          sheet.getRange(rowIndex, COL["expiry"] + 1).setValue(expiryDate.toISOString());
+        }
+        rowExpiry = expiryDate;
+      }
+      var exp = new Date(rowExpiry);
+      if (exp < today) {
+        return jsonResponse({ valid: false, reason: "beta_expired" });
+      }
+      daysLeft = Math.ceil((exp.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    } else if (rowExpiry) {
+      var expiryDate = new Date(rowExpiry);
+      if (expiryDate < today) {
+        return jsonResponse({ valid: false, reason: "license_expired" });
+      }
+    }
+
+    // 2. Parse current device list
+    var devices = [];
+    try {
+      devices = JSON.parse(rowDevicesStr);
+      if (!Array.isArray(devices)) devices = [];
+    } catch (pe) {
+      devices = [];
+    }
+
+    // 3. Idempotency Check: If requested deviceId is already present
+    var planConfig = PLAN_CONFIG[rowPlan] || PLAN_CONFIG["basic"];
+    if (devices.indexOf(deviceId) >= 0) {
+      return jsonResponse({
+        authenticated: true,
+        user: {
+          email: email,
+          plan: rowPlan,
+          license: licenseKey,
+          expires: rowExpiry ? rowExpiry : "never",
+          lastValidated: new Date().toISOString()
+        },
+        capabilities: planConfig,
+        maxDevices: rowMaxDevices,
+        deviceCount: devices.length,
+        betaDaysLeft: (typeof daysLeft !== 'undefined') ? Math.max(0, daysLeft) : undefined
+      });
+    }
+
+    // 4. Perform Device Switch / Eviction
+    if (devices.length < rowMaxDevices) {
+      devices.push(deviceId);
+    } else if (rowMaxDevices === 1) {
+      devices = [deviceId];
+    } else { // rowMaxDevices > 1 and limit is reached
+      devices.shift(); // remove oldest device
+      devices.push(deviceId);
+    }
+
+    // 5. Persist updated device list
+    sheet.getRange(rowIndex, COL["activated_devices"] + 1).setValue(JSON.stringify(devices));
+    if (COL["device_id"] !== undefined) {
+      sheet.getRange(rowIndex, COL["device_id"] + 1).setValue(devices.join(","));
+    }
+
+    return jsonResponse({
+      authenticated: true,
+      user: {
+        email: email,
+        plan: rowPlan,
+        license: licenseKey,
+        expires: rowExpiry ? rowExpiry : "never",
+        lastValidated: new Date().toISOString()
+      },
+      capabilities: planConfig,
+      maxDevices: rowMaxDevices,
+      deviceCount: devices.length,
+      betaDaysLeft: (typeof daysLeft !== 'undefined') ? Math.max(0, daysLeft) : undefined
+    });
+
+  } catch (err) {
+    return jsonResponse({ valid: false, reason: "server_error", message: err.message });
+  } finally {
+    try { lock.releaseLock(); } catch(le) {}
+  }
+}
+
+function handleDeactivateDevice(data, ss) {
+  var email = (data.email || "").trim().toLowerCase();
+  var licenseKey = (data.licenseKey || "").trim();
+  var deviceId = (data.deviceId || "").trim();
+
+  if (!email || !licenseKey || !deviceId) {
+    return jsonResponse({ success: false, reason: "missing_fields" });
+  }
+
+  var userMatch = findUserAcrossTabs(ss, email, licenseKey);
+  if (!userMatch) {
+    return jsonResponse({ success: false, reason: "invalid_license" });
+  }
+
+  var COL = userMatch.colMap;
+  var devicesStr = (userMatch.rowData[COL["activated_devices"]] || "[]").toString();
+  var devices = [];
+  try { devices = JSON.parse(devicesStr); } catch (e) { devices = []; }
+
+  var idx = devices.indexOf(deviceId);
+  if (idx >= 0) {
+    devices.splice(idx, 1);
+    userMatch.sheet.getRange(userMatch.rowIndex, COL["activated_devices"] + 1)
+      .setValue(JSON.stringify(devices));
+    if (COL["device_id"] !== undefined) {
+      userMatch.sheet.getRange(userMatch.rowIndex, COL["device_id"] + 1)
+        .setValue(devices.join(","));
+    }
+  }
+
+  return jsonResponse({ success: true, removedDevice: deviceId, remainingDevices: devices.length });
+}
+
+// ──────────────────────────────────────────
+// DATABASE UTILITIES (Multi-Tab)
+// ──────────────────────────────────────────
+
+function getColMap(sheet) {
+  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var COL = {};
+  for (var h = 0; h < headers.length; h++) {
+    if (headers[h]) {
+      COL[headers[h].toString().toLowerCase().trim()] = h;
+    }
+  }
+  return COL;
+}
+
+function ensureTabExists(ss, sheetName, headers) {
+  var sheet = ss.getSheetByName(sheetName);
+  if (!sheet) {
+    sheet = ss.insertSheet(sheetName);
+    sheet.appendRow(headers || DEFAULT_HEADERS);
+  }
+  return sheet;
+}
+
+function appendToPlanTab(ss, planId, rowObj) {
+  var config = PLAN_CONFIG[planId] || PLAN_CONFIG["basic"];
+  var sheet = ensureTabExists(ss, config.sheetName);
+  var COL = getColMap(sheet);
+
+  var newRow = new Array(Object.keys(COL).length).fill("");
+  for (var key in rowObj) {
+    if (COL[key] !== undefined) {
+      newRow[COL[key]] = rowObj[key];
+    }
+  }
+  sheet.appendRow(newRow);
+}
+
+function findUserAcrossTabs(ss, email, licenseKeyMatch) {
+  var searchTabs = Object.keys(PLAN_CONFIG).map(function (k) { return PLAN_CONFIG[k].sheetName; });
+
+  for (var t = 0; t < searchTabs.length; t++) {
+    var sheet = ss.getSheetByName(searchTabs[t]);
+    if (!sheet) continue;
+
+    var rows = sheet.getDataRange().getValues();
+    if (rows.length < 2) continue;
+
+    var COL = getColMap(sheet);
+    if (COL["email"] === undefined) continue;
+
+    for (var i = 1; i < rows.length; i++) {
+      var rowEmail = (rows[i][COL["email"]] || "").toString().trim().toLowerCase();
+      if (rowEmail === email.toLowerCase().trim()) {
+        var rowKey = (rows[i][COL["license_key"]] || "").toString().trim();
+        var rowDevices = (rows[i][COL["activated_devices"]] || "[]").toString().trim();
+        if (licenseKeyMatch) {
+          if (rowKey === licenseKeyMatch.trim()) {
+            return { sheet: sheet, rowIndex: i + 1, rowData: rows[i], colMap: COL, key: rowKey, activated_devices: rowDevices };
+          }
+        } else {
+          return { sheet: sheet, rowIndex: i + 1, rowData: rows[i], colMap: COL, key: rowKey, activated_devices: rowDevices };
+        }
+      }
+    }
+  }
+  return null;
+}
+
+function validateSheetHeaders(sheet, requiredHeaders) {
+  if (!sheet) return requiredHeaders;
+  var COL = getColMap(sheet);
+  var missing = [];
+  for (var i = 0; i < requiredHeaders.length; i++) {
+    var h = requiredHeaders[i].toLowerCase().trim();
+    if (COL[h] === undefined) {
+      missing.push(requiredHeaders[i]);
+    }
+  }
+  return missing;
+}
+
+function verifySubscriptionWriteBack(ss, planId, email) {
+  var config = PLAN_CONFIG[planId] || PLAN_CONFIG["basic"];
+  var sheet = ss.getSheetByName(config.sheetName);
+  if (!sheet) return null;
+
+  var COL = getColMap(sheet);
+  var rows = sheet.getDataRange().getValues();
+
+  for (var i = 1; i < rows.length; i++) {
+    var rowEmail = (rows[i][COL["email"]] || "").toString().trim().toLowerCase();
+    if (rowEmail === email.toLowerCase().trim()) {
+      var key = (rows[i][COL["license_key"]] || "").toString().trim();
+      var status = (rows[i][COL["status"]] || "").toString().trim();
+      var plan = (rows[i][COL["plan"]] || "").toString().trim();
+      var maxDevices = rows[i][COL["max_devices"]];
+      var activatedDevicesStr = (rows[i][COL["activated_devices"]] || "").toString().trim();
+
+      var isKeyValid = key.length >= 8;
+      var isStatusActive = status === "active";
+      var isPlanCorrect = plan.toLowerCase() === planId.toLowerCase();
+      var isMaxDevicesCorrect = Number(maxDevices) === config.maxDevices;
+      var isActivatedDevicesValid = activatedDevicesStr.startsWith("[") && activatedDevicesStr.endsWith("]");
+
+      if (isKeyValid && isStatusActive && isPlanCorrect && isMaxDevicesCorrect && isActivatedDevicesValid) {
+        return {
+          email: rowEmail,
+          license_key: key,
+          status: status,
+          plan: plan,
+          max_devices: maxDevices,
+          activated_devices: activatedDevicesStr
+        };
+      }
+    }
+  }
+  return null;
+}
+
+function findTransactionByPaymentId(transSheet, paymentId) {
+  if (!transSheet || !paymentId) return null;
+  var rows = transSheet.getDataRange().getValues();
+  if (rows.length < 2) return null;
+  var COL = getColMap(transSheet);
+  if (COL["paymentid"] === undefined) return null;
+
+  for (var i = 1; i < rows.length; i++) {
+    var pId = (rows[i][COL["paymentid"]] || "").toString().trim();
+    if (pId === paymentId.trim()) {
+      return {
+        rowIndex: i + 1,
+        paymentId: pId,
+        orderId: COL["orderid"] !== undefined ? rows[i][COL["orderid"]] : "",
+        email: COL["email"] !== undefined ? rows[i][COL["email"]] : "",
+        name: COL["email"] !== undefined ? (rows[i][COL["name"]] || "User") : "User",
+        plan: COL["plan"] !== undefined ? rows[i][COL["plan"]] : "",
+        licenseKey: COL["licensekey"] !== undefined ? rows[i][COL["licensekey"]] : "",
+        actionTaken: COL["actiontaken"] !== undefined ? rows[i][COL["actiontaken"]] : "",
+        email_status: COL["email_status"] !== undefined ? rows[i][COL["email_status"]] : "pending",
+        colMap: COL,
+        rowData: rows[i]
+      };
+    }
+  }
+  return null;
+}
+
+function findUserInSpecificTab(ss, planId, email) {
+  var config = PLAN_CONFIG[planId];
+  if (!config) return null;
+  var sheet = ss.getSheetByName(config.sheetName);
+  if (!sheet) return null;
+
+  var rows = sheet.getDataRange().getValues();
+  if (rows.length < 2) return null;
+  var COL = getColMap(sheet);
+  if (COL["email"] === undefined) return null;
+
+  for (var i = 1; i < rows.length; i++) {
+    var rowEmail = (rows[i][COL["email"]] || "").toString().trim().toLowerCase();
+    if (rowEmail === email.toLowerCase().trim()) {
+      return {
+        sheet: sheet,
+        rowIndex: i + 1,
+        key: (rows[i][COL["license_key"]] || "").toString().trim(),
+        status: (rows[i][COL["status"]] || "").toString().trim(),
+        plan: (rows[i][COL["plan"]] || "").toString().trim(),
+        rowData: rows[i],
+        colMap: COL
+      };
+    }
+  }
+  return null;
+}
+
+
+function recoverFailedPayment(targetPaymentId) {
+  var pId = (targetPaymentId || "").trim();
+  if (!pId) return { status: "error", code: "MISSING_PAYMENT_ID", message: "Missing paymentId parameter." };
+
+  var ss = SpreadsheetApp.openByUrl(SPREADSHEET_URL);
+  var transSheet = ss.getSheetByName(TRANSACTIONS_TAB_NAME);
+  var planToProvision = null;
+  var email = null;
+  var name = "User";
+  var keyToUse = null;
+  var emailSent = false;
+  var sendEmailOutsideLock = false;
+
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var transMatch = findTransactionByPaymentId(transSheet, pId);
+    var emailToSearch = transMatch ? transMatch.email : "";
+    var subMatch = emailToSearch ? findUserAcrossTabs(ss, emailToSearch) : null;
+
+    if (!transMatch && !subMatch) {
+      return { 
+        status: "error", 
+        code: "UNVERIFIED_RECOVERY_DETAILS", 
+        message: "Cannot establish verified payment records for paymentId: " + pId + ". Manual admin investigation required." 
+      };
+    }
+
+    planToProvision = transMatch ? transMatch.plan : (subMatch ? subMatch.rowData[subMatch.colMap["plan"]] : null);
+    email = transMatch ? transMatch.email : (subMatch ? subMatch.rowData[subMatch.colMap["email"]] : null);
+    name = transMatch ? transMatch.name : (subMatch ? subMatch.rowData[subMatch.colMap["name"]] : "User");
+    keyToUse = transMatch ? transMatch.licenseKey : (subMatch ? subMatch.rowData[subMatch.colMap["license_key"]] : null);
+
+    if (!planToProvision || !PLAN_CONFIG[planToProvision.toLowerCase()]) {
+      return {
+        status: "error",
+        code: "UNVERIFIED_PLAN",
+        message: "Purchased plan could not be established from trusted records for paymentId: " + pId + ". Manual investigation required."
+      };
+    }
+
+    if (!keyToUse) {
+      return {
+        status: "error",
+        code: "UNVERIFIED_LICENSE_KEY",
+        message: "Original license key could not be established from trusted database records for paymentId: " + pId + ". Manual admin investigation required."
+      };
+    }
+
+    planToProvision = planToProvision.toLowerCase();
+
+    if (!subMatch) {
+      var maxDevices = PLAN_CONFIG[planToProvision].maxDevices;
+      var newRowObj = { name: name, email: email, license_key: keyToUse, plan: planToProvision, status: "active", activated_devices: "[]", max_devices: maxDevices, expiry: "", email_status: "pending" };
+      appendToPlanTab(ss, planToProvision, newRowObj);
+      var verifiedObj = verifySubscriptionWriteBack(ss, planToProvision, email);
+      if (!verifiedObj) throw new Error("Write-back verification failed during admin recovery.");
+    }
+
+    if (!transMatch) {
+      appendTransactionLog(transSheet, { paymentId: pId, email: email, plan: planToProvision, licenseKey: keyToUse, actionTaken: "repaired_transaction", email_status: "pending" });
+    }
+
+    var currentEmailStatus = transMatch ? transMatch.email_status : "pending";
+    if (currentEmailStatus !== "sent") {
+      sendEmailOutsideLock = true;
+    } else {
+      emailSent = true;
+    }
+  } finally {
+    lock.releaseLock();
+  }
+
+  if (sendEmailOutsideLock) {
+    try {
+      sendLicenseEmail(email, name, planToProvision, keyToUse);
+      emailSent = true;
+      updateEmailStatusInSheetsLock(ss, email, pId, "sent");
+    } catch (e) {
+      Logger.log("Recovery email send failed: " + e);
+      updateEmailStatusInSheetsLock(ss, email, pId, "failed");
+    }
+  }
+
+  return { status: "success", message: "Payment recovery completed successfully.", paymentId: pId, plan: planToProvision, licenseKey: keyToUse, emailSent: emailSent };
+}
+
+
 /**
 * Captiongrit — Google Apps Script (License Validation)
 * 
@@ -2457,609 +3424,119 @@ function recoverRazorpayPayments(confirmGuard, paymentIdList, fromDateStr, toDat
 // NAMESPACED ADMIN CONTROL CENTER API
 // ──────────────────────────────────────────
 
-function handleAdminAction(data, ss) {
-  var action = (data.action || "").trim().toLowerCase();
-  
-  if (data.adminSecret !== ADMIN_SECRET) {
-    return jsonResponse({ status: "error", code: "UNAUTHORIZED", message: "Invalid or missing admin secret token." });
-  }
 
-  var opId = data.opId || ("ADM-" + Utilities.formatDate(new Date(), "GMT+05:30", "yyyyMMdd") + "-" + Math.floor(1000 + Math.random() * 9000));
 
-  try {
-    if (action === "admin_dashboard_data") {
-      return jsonResponse(getAdminDashboardData(ss));
-    }
-    if (action === "admin_customer_list") {
-      return jsonResponse(getAdminCustomerList(ss, data));
-    }
-    if (action === "admin_customer_action") {
-      return jsonResponse(executeAdminCustomerAction(ss, data, opId));
-    }
-    if (action === "admin_transaction_list") {
-      return jsonResponse(getAdminTransactionList(ss, data));
-    }
-    if (action === "admin_payment_preview_recovery") {
-      return jsonResponse(previewRazorpayRecoveries(data.fromDateStr, data.toDateStr));
-    }
-    if (action === "admin_payment_recover") {
-      return jsonResponse(recoverRazorpayPayments(data.confirmGuard, data.paymentIdList, data.fromDateStr, data.toDateStr));
-    }
-    if (action === "admin_email_broadcast_preview") {
-      return jsonResponse(executeVersionBroadcast({
-        version: data.version || "1.0.3",
-        subject: data.subject || "🚀 Important Update: Captiongrit v1.0.3 is here!",
-        downloadUrl: data.downloadUrl || getDownloadUrl(),
-        recipientMode: data.recipientMode || "active_users",
-        dryRun: true,
-        confirmationGuard: data.confirmationGuard || "PREVIEW_ONLY",
-        expectedGuard: "CONFIRM_SEND_" + (data.version || "1.0.3"),
-        source: "AdminControlCenter"
-      }));
-    }
-    if (action === "admin_email_broadcast_send") {
-      return jsonResponse(executeVersionBroadcast({
-        version: data.version || "1.0.3",
-        subject: data.subject || "🚀 Important Update: Captiongrit v1.0.3 is here!",
-        downloadUrl: data.downloadUrl || getDownloadUrl(),
-        recipientMode: data.recipientMode || "active_users",
-        dryRun: false,
-        confirmationGuard: data.confirmationGuard,
-        expectedGuard: "CONFIRM_SEND_" + (data.version || "1.0.3"),
-        source: "AdminControlCenter"
-      }));
-    }
-    if (action === "admin_health_check") {
-      var schemaRes = validateDatabaseSchemas();
-      var quota = MailApp.getRemainingDailyQuota();
-      return jsonResponse({
-        status: "ok",
-        schema: schemaRes,
-        emailQuotaRemaining: quota,
-        razorpayConfigured: !!getRazorpayCredentials(),
-        timestamp: new Date().toISOString()
-      });
-    }
-    if (action === "admin_integrity_scan") {
-      return jsonResponse(runAdminIntegrityScan(ss));
-    }
-    if (action === "admin_version_info") {
-      return jsonResponse({
-        status: "ok",
-        currentVersion: "1.0.3",
-        latestVersion: "1.0.3",
-        downloadUrl: getDownloadUrl(),
-        releaseDate: new Date().toISOString().split("T")[0],
-        statusText: "Active Production Release"
-      });
-    }
-    if (action === "admin_audit_list") {
-      return jsonResponse(getAdminAuditList(ss));
-    }
-
-    return jsonResponse({ status: "error", code: "UNKNOWN_ADMIN_ACTION", message: "Unrecognized admin action: " + action });
-
-  } catch (err) {
-    Logger.log("Admin API Error [" + action + "]: " + err);
-    return jsonResponse({ status: "error", code: "SERVER_ERROR", message: err.message, opId: opId });
-  }
+function resetDb() {
+  sheetsDb = { Transactions: [], Basic: [], Pro: [], Extreme: [], Beta: [] };
+  logBuffer = [];
+  emailDispatches = 0;
+  lockAcquired = false;
+  emailFailures = 0;
+  global.concurrentPayload = null;
+  global.concurrentError = null;
 }
 
-function getAdminDashboardData(ss) {
-  var tabs = ["Basic", "Pro", "Extreme", "Beta"];
-  var counts = { total: 0, basic: 0, pro: 0, extreme: 0, beta: 0, active: 0, inactive: 0 };
+function printReport(testName, input, startTime, result, beforeDb, afterDb, errors) {
+  let endTime = Date.now();
+  console.log("\n=======================================================");
+  console.log("TEST:", testName);
+  console.log("INPUT:", JSON.stringify(input));
+  console.log("EXECUTION TIME:", (endTime - startTime) + "ms");
+  console.log("RESULT:", typeof result === 'object' ? JSON.stringify(result) : result);
+  console.log("ROWS BEFORE:", JSON.stringify({ Basic: beforeDb.Basic.length, Pro: beforeDb.Pro.length, Extreme: beforeDb.Extreme.length, Trans: beforeDb.Transactions.length }));
+  console.log("ROWS AFTER:", JSON.stringify({ Basic: afterDb.Basic.length, Pro: afterDb.Pro.length, Extreme: afterDb.Extreme.length, Trans: afterDb.Transactions.length }));
   
-  for (var t = 0; t < tabs.length; t++) {
-    var sheet = ss.getSheetByName(tabs[t]);
-    if (!sheet) continue;
-    var rows = sheet.getDataRange().getValues();
-    if (rows.length < 2) continue;
-    var COL = getColMap(sheet);
-    for (var r = 1; r < rows.length; r++) {
-      var email = (rows[r][COL["email"]] || "").toString().trim();
-      if (!email) continue;
-      counts.total++;
-      var tabLower = tabs[t].toLowerCase();
-      if (counts[tabLower] !== undefined) counts[tabLower]++;
-      var status = (rows[r][COL["status"]] || "").toString().trim().toLowerCase();
-      if (status === "active") counts.active++;
-      else counts.inactive++;
-    }
+  let trans = afterDb.Transactions;
+  if (trans.length > 0) {
+    console.log("EMAIL STATUS(ES):", trans.map(t => t.email_status).join(", "));
   }
+  
+  let dupLicense = false, dupTrans = false;
+  let allEmails = trans.map(t => t.email);
+  if (new Set(allEmails).size !== allEmails.length) dupTrans = true; // basic heuristic
+  
+  console.log("DUPLICATE LICENSE/TRANS?:", dupTrans ? "YES" : "NO");
+  console.log("CONCURRENCY_ERROR OCCURRED?:", errors.some(e => String(e).includes("CONCURRENCY_ERROR")) ? "YES" : "NO");
+  console.log("EMAILS DISPATCHED:", emailDispatches);
+}
 
-  var transSheet = ss.getSheetByName(TRANSACTIONS_TAB_NAME);
-  var recentTransactions = [];
-  if (transSheet) {
-    var tRows = transSheet.getDataRange().getValues();
-    var tCOL = getColMap(transSheet);
-    var maxIdx = Math.max(1, tRows.length - 15);
-    for (var i = tRows.length - 1; i >= maxIdx; i--) {
-      recentTransactions.push({
-        paymentId: tRows[i][tCOL["paymentid"]] || "",
-        email: tRows[i][tCOL["email"]] || "",
-        plan: tRows[i][tCOL["plan"]] || "",
-        amount: tRows[i][tCOL["amount"]] || "",
-        actionTaken: tRows[i][tCOL["actiontaken"]] || "",
-        timestamp: tRows[i][tCOL["timestamp"]] || ""
-      });
-    }
-  }
+function runTests() {
 
-  return {
-    status: "ok",
-    counts: counts,
-    recentTransactions: recentTransactions,
-    systemTime: new Date().toISOString()
+  // TEST 1
+  resetDb();
+  let start1 = Date.now();
+  let b1 = JSON.parse(JSON.stringify(sheetsDb));
+  let res1 = handlePaidSignup({ secret: "secret", data: { paymentId: "pay_1", email: "test1@test.com", plan: "basic", licenseKey: "CG-1" } }, null);
+  printReport("1. Single standard paid_signup", "pay_1 (basic)", start1, res1, b1, sheetsDb, []);
+
+  // TEST 2
+  resetDb();
+  let start2 = Date.now();
+  let b2 = JSON.parse(JSON.stringify(sheetsDb));
+  let res2a, res2b;
+  let errs2 = [];
+  try {
+      global.concurrentPayload = { secret: "secret", data: { paymentId: "pay_2b", email: "test2b@test.com", plan: "pro", licenseKey: "CG-2B" } };
+      res2a = handlePaidSignup({ secret: "secret", data: { paymentId: "pay_2a", email: "test2a@test.com", plan: "pro", licenseKey: "CG-2A" } }, null);
+      if (global.concurrentError) errs2.push(global.concurrentError);
+  } catch(e) { errs2.push(e); }
+  printReport("2. Two simultaneous paid_signup (different paymentIds)", "pay_2a, pay_2b", start2, res2a, b2, sheetsDb, errs2);
+
+  // TEST 3
+  resetDb();
+  let start3 = Date.now();
+  let b3 = JSON.parse(JSON.stringify(sheetsDb));
+  let errs3 = [];
+  let res3a;
+  try {
+      global.concurrentPayload = { secret: "secret", data: { paymentId: "pay_3", email: "test3@test.com", plan: "extreme", licenseKey: "CG-3" } };
+      res3a = handlePaidSignup({ secret: "secret", data: { paymentId: "pay_3", email: "test3@test.com", plan: "extreme", licenseKey: "CG-3" } }, null);
+      if (global.concurrentError) errs3.push(global.concurrentError);
+  } catch(e) { errs3.push(e); }
+  printReport("3. Two simultaneous paid_signup (SAME paymentId)", "pay_3 (x2)", start3, res3a, b3, sheetsDb, errs3);
+
+  // TEST 4
+  resetDb();
+  let start4 = Date.now();
+  let b4 = JSON.parse(JSON.stringify(sheetsDb));
+  emailFailures = 1;
+  let res4 = handlePaidSignup({ secret: "secret", data: { paymentId: "pay_4", email: "test4@test.com", plan: "basic", licenseKey: "CG-4" } }, null);
+  printReport("4. Email failure after successful Sheet fulfillment", "pay_4", start4, res4, b4, sheetsDb, []);
+
+  // TEST 5
+  // keeping the state from test 4
+  let start5 = Date.now();
+  let b5 = JSON.parse(JSON.stringify(sheetsDb));
+  emailDispatches = 0;
+  let res5 = handlePaidSignup({ secret: "secret", data: { paymentId: "pay_4", email: "test4@test.com", plan: "basic", licenseKey: "CG-4" } }, null);
+  printReport("5. Retry after email failure", "pay_4 retry", start5, res5, b5, sheetsDb, []);
+
+  // TEST 6
+  resetDb();
+  global.fetchSingleRazorpayPayment = function(pId) {
+    return { id: pId, status: "captured", email: pId.replace("pay_", "recov_") + "@test.com", amount: 59900, currency: "INR" };
   };
-}
-
-function getAdminCustomerList(ss, data) {
-  var targetTab = (data.tab || "all").toLowerCase();
-  var search = (data.search || "").toLowerCase().trim();
-  var tabsToScan = ["Basic", "Pro", "Extreme", "Beta"];
-  if (targetTab !== "all" && PLAN_CONFIG[targetTab]) {
-    tabsToScan = [PLAN_CONFIG[targetTab].sheetName];
-  }
-
-  var customers = [];
-  for (var t = 0; t < tabsToScan.length; t++) {
-    var sheet = ss.getSheetByName(tabsToScan[t]);
-    if (!sheet) continue;
-    var rows = sheet.getDataRange().getValues();
-    if (rows.length < 2) continue;
-    var COL = getColMap(sheet);
-
-    for (var r = 1; r < rows.length; r++) {
-      var row = rows[r];
-      var email = (row[COL["email"]] || "").toString().trim().toLowerCase();
-      var name = (row[COL["name"]] || "User").toString().trim();
-      var key = (row[COL["license_key"]] || "").toString().trim();
-      var plan = (row[COL["plan"]] || tabsToScan[t]).toString().trim().toLowerCase();
-      var status = (row[COL["status"]] || "").toString().trim();
-      var devicesStr = (row[COL["activated_devices"]] || "[]").toString();
-
-      if (search) {
-        if (email.indexOf(search) === -1 && name.toLowerCase().indexOf(search) === -1 && key.toLowerCase().indexOf(search) === -1) {
-          continue;
-        }
-      }
-
-      customers.push({
-        name: name,
-        email: email,
-        licenseKey: key,
-        plan: plan,
-        status: status,
-        tabName: tabsToScan[t],
-        maxDevices: row[COL["max_devices"]] || 1,
-        activatedDevices: devicesStr,
-        emailStatus: COL["email_status"] !== undefined ? row[COL["email_status"]] : "unknown",
-        expiry: COL["expiry"] !== undefined ? row[COL["expiry"]] : ""
-      });
-    }
-  }
-
-  return { status: "ok", count: customers.length, customers: customers };
-}
-
-function getAdminTransactionList(ss, data) {
-  var transSheet = ss.getSheetByName(TRANSACTIONS_TAB_NAME);
-  if (!transSheet) return { status: "ok", transactions: [] };
-
-  var rows = transSheet.getDataRange().getValues();
-  if (rows.length < 2) return { status: "ok", transactions: [] };
-  var COL = getColMap(transSheet);
-
-  var transactions = [];
-  for (var i = rows.length - 1; i >= 1; i--) {
-    var row = rows[i];
-    transactions.push({
-      transactionId: COL["transactionid"] !== undefined ? row[COL["transactionid"]] : "",
-      paymentId: COL["paymentid"] !== undefined ? row[COL["paymentid"]] : "",
-      orderId: COL["orderid"] !== undefined ? row[COL["orderid"]] : "",
-      email: COL["email"] !== undefined ? row[COL["email"]] : "",
-      plan: COL["plan"] !== undefined ? row[COL["plan"]] : "",
-      amount: COL["amount"] !== undefined ? row[COL["amount"]] : "",
-      currency: COL["currency"] !== undefined ? row[COL["currency"]] : "INR",
-      timestamp: COL["timestamp"] !== undefined ? row[COL["timestamp"]] : "",
-      status: COL["status"] !== undefined ? row[COL["status"]] : "",
-      licenseKey: COL["licensekey"] !== undefined ? row[COL["licensekey"]] : "",
-      actionTaken: COL["actiontaken"] !== undefined ? row[COL["actiontaken"]] : "",
-      email_status: COL["email_status"] !== undefined ? row[COL["email_status"]] : ""
-    });
-  }
-
-  return { status: "ok", count: transactions.length, transactions: transactions };
-}
-
-function executeAdminCustomerAction(ss, data, opId) {
-  var subAction = (data.subAction || "").toLowerCase();
-  var email = (data.email || "").trim().toLowerCase();
-  if (!email) return { status: "error", code: "MISSING_EMAIL", message: "Email parameter required." };
-
-  var userMatch = findUserAcrossTabs(ss, email);
-  if (!userMatch && subAction !== "create_license") {
-    return { status: "error", code: "CUSTOMER_NOT_FOUND", message: "Customer " + email + " not found." };
-  }
-
-  var beforeState = userMatch ? { tab: userMatch.sheet.getName(), plan: userMatch.rowData[userMatch.colMap["plan"]], status: userMatch.rowData[userMatch.colMap["status"]] } : null;
-
-  if (subAction === "suspend") {
-    userMatch.sheet.getRange(userMatch.rowIndex, userMatch.colMap["status"] + 1).setValue("deactivated");
-    logAdminAudit(ss, opId, "suspend", email, "Customer", beforeState, { status: "deactivated" }, data.reason || "Admin suspended customer");
-    return { status: "ok", message: "Customer suspended.", opId: opId };
-  }
-
-  if (subAction === "reactivate") {
-    userMatch.sheet.getRange(userMatch.rowIndex, userMatch.colMap["status"] + 1).setValue("active");
-    logAdminAudit(ss, opId, "reactivate", email, "Customer", beforeState, { status: "active" }, data.reason || "Admin reactivated customer");
-    return { status: "ok", message: "Customer reactivated.", opId: opId };
-  }
-
-  if (subAction === "reset_devices") {
-    userMatch.sheet.getRange(userMatch.rowIndex, userMatch.colMap["activated_devices"] + 1).setValue("[]");
-    if (userMatch.colMap["device_id"] !== undefined) {
-      userMatch.sheet.getRange(userMatch.rowIndex, userMatch.colMap["device_id"] + 1).setValue("");
-    }
-    logAdminAudit(ss, opId, "reset_devices", email, "Devices", beforeState, { devices: "[]" }, data.reason || "Admin reset devices");
-    return { status: "ok", message: "Devices reset successfully.", opId: opId };
-  }
-
-  if (subAction === "remove_device") {
-    var deviceIdToRemove = (data.deviceId || "").trim();
-    if (!deviceIdToRemove) return { status: "error", code: "MISSING_DEVICE_ID", message: "Device ID required." };
-    removeDevice(email, deviceIdToRemove);
-    logAdminAudit(ss, opId, "remove_device", email, "Devices", beforeState, { removedDevice: deviceIdToRemove }, data.reason || "Admin removed single device");
-    return { status: "ok", message: "Device " + deviceIdToRemove + " removed.", opId: opId };
-  }
-
-  if (subAction === "change_plan") {
-    var newPlan = (data.newPlan || "").toLowerCase();
-    if (!PLAN_CONFIG[newPlan]) return { status: "error", code: "INVALID_PLAN", message: "Invalid plan: " + newPlan };
-
-    var keyToUse = userMatch.key;
-    var devicesToUse = (userMatch.rowData[userMatch.colMap["activated_devices"]] || "[]").toString().trim();
-    var name = (userMatch.rowData[userMatch.colMap["name"]] || "User").toString().trim();
-
-    var targetSheet = ss.getSheetByName(PLAN_CONFIG[newPlan].sheetName);
-    var newRowObj = {
-      name: name,
-      email: email,
-      license_key: keyToUse,
-      plan: newPlan,
-      status: "active",
-      activated_devices: devicesToUse,
-      max_devices: PLAN_CONFIG[newPlan].maxDevices,
-      expiry: "",
-      email_status: "pending"
-    };
-
-    appendToPlanTab(ss, newPlan, newRowObj);
-
-    var verified = verifySubscriptionWriteBack(ss, newPlan, email);
-    if (!verified) throw new Error("Subscription write-back verification failed during plan change.");
-
-    if (userMatch.sheet.getName() !== PLAN_CONFIG[newPlan].sheetName) {
-      userMatch.sheet.deleteRow(userMatch.rowIndex);
-    }
-
-    logAdminAudit(ss, opId, "change_plan", email, "Subscription", beforeState, { plan: newPlan }, data.reason || "Admin changed plan to " + newPlan);
-    return { status: "ok", message: "Plan changed to " + newPlan + " successfully.", opId: opId, licenseKey: keyToUse };
-  }
-
-  if (subAction === "resend_email") {
-    var currentPlan = userMatch.rowData[userMatch.colMap["plan"]] || userMatch.sheet.getName();
-    sendLicenseEmail(email, userMatch.rowData[userMatch.colMap["name"]] || "User", currentPlan, userMatch.key);
-    updateEmailStatusInSheets(ss, email, null, "sent");
-    logAdminAudit(ss, opId, "resend_email", email, "Email", beforeState, { email_status: "sent" }, "Admin resent license email");
-    return { status: "ok", message: "License email resent successfully.", opId: opId };
-  }
-
-  return { status: "error", code: "UNKNOWN_SUB_ACTION", message: "Sub-action not recognized: " + subAction };
-}
-
-function runAdminIntegrityScan(ss) {
-  var issues = [];
-  var tabs = ["Basic", "Pro", "Extreme", "Beta"];
-  var seenKeys = {};
-  var seenEmails = {};
-
-  for (var t = 0; t < tabs.length; t++) {
-    var sheet = ss.getSheetByName(tabs[t]);
-    if (!sheet) continue;
-    var rows = sheet.getDataRange().getValues();
-    if (rows.length < 2) continue;
-    var COL = getColMap(sheet);
-
-    for (var r = 1; r < rows.length; r++) {
-      var email = (rows[r][COL["email"]] || "").toString().trim().toLowerCase();
-      var key = (rows[r][COL["license_key"]] || "").toString().trim();
-      var devices = (rows[r][COL["activated_devices"]] || "[]").toString();
-
-      if (email) {
-        if (seenEmails[email]) {
-          issues.push({ severity: "HIGH", entity: "Customer", explanation: "Duplicate customer email in multiple rows/tabs: " + email, recommendedAction: "Inspect duplicate rows and clean up" });
-        }
-        seenEmails[email] = tabs[t];
-      }
-
-      if (key) {
-        if (seenKeys[key]) {
-          issues.push({ severity: "CRITICAL", entity: "License", explanation: "Duplicate license key found: " + key, recommendedAction: "Revoke duplicate key" });
-        }
-        seenKeys[key] = email;
-      }
-
-      if (!devices.startsWith("[") || !devices.endsWith("]")) {
-        issues.push({ severity: "MEDIUM", entity: "Device", explanation: "Malformed activated_devices JSON for " + email, recommendedAction: "Reset devices to []" });
-      }
-    }
-  }
-
-  return { status: "ok", issueCount: issues.length, issues: issues, scannedAt: new Date().toISOString() };
-}
-
-function logAdminAudit(ss, opId, action, customer, entity, beforeState, afterState, reason) {
+  global.fetchRazorpayOrderFromApi = function(oId) { return null; };
+  global.determinePlanFromRazorpayMetadata = function(p, o) { return "basic"; };
+  
+  let start6 = Date.now();
+  let b6 = JSON.parse(JSON.stringify(sheetsDb));
+  let errs6 = [];
+  let res6a;
   try {
-    var auditSheet = ensureTabExists(ss, "AdminAuditLog", ["timestamp", "opId", "admin", "action", "customer", "entity", "beforeState", "afterState", "reason"]);
-    auditSheet.appendRow([
-      new Date().toISOString(),
-      opId,
-      "Admin",
-      action,
-      customer,
-      entity,
-      JSON.stringify(beforeState || {}),
-      JSON.stringify(afterState || {}),
-      reason || ""
-    ]);
-  } catch (e) {
-    Logger.log("Audit log write failed: " + e);
-  }
+      global.concurrentPayload = { secret: "secret", data: { paymentId: "pay_6", email: "recov_6@test.com", plan: "basic", licenseKey: "CG-6" } };
+      res6a = executeRazorpayRecoveries(["pay_6"], null, null);
+      if (global.concurrentError) errs6.push(global.concurrentError);
+  } catch(e) { errs6.push(e); }
+  printReport("6. Recovery running concurrently with paid_signup", "pay_6", start6, res6a, b6, sheetsDb, errs6);
+
+  // TEST 7
+  resetDb();
+  let start7 = Date.now();
+  let b7 = JSON.parse(JSON.stringify(sheetsDb));
+  let res7 = executeRazorpayRecoveries(["pay_7a", "pay_7b", "pay_7c"], null, null);
+  printReport("7. Multiple recovery payments", "pay_7a, pay_7b, pay_7c", start7, res7, b7, sheetsDb, []);
+
 }
 
-function getAdminAuditList(ss) {
-  var sheet = ss.getSheetByName("AdminAuditLog");
-  if (!sheet) return { status: "ok", logs: [] };
-  var rows = sheet.getDataRange().getValues();
-  if (rows.length < 2) return { status: "ok", logs: [] };
-  var COL = getColMap(sheet);
-
-  var logs = [];
-  for (var i = rows.length - 1; i >= 1; i--) {
-    logs.push({
-      timestamp: rows[i][COL["timestamp"]],
-      opId: rows[i][COL["opid"]],
-      admin: rows[i][COL["admin"]],
-      action: rows[i][COL["action"]],
-      customer: rows[i][COL["customer"]],
-      entity: rows[i][COL["entity"]],
-      reason: rows[i][COL["reason"]]
-    });
-  }
-  return { status: "ok", logs: logs };
-}
-
-// ──────────────────────────────────────────
-// ADMIN HANDLERS
-// ──────────────────────────────────────────
-
-function handleAdminAction(data, ss) {
-  // Authentication Guard
-  var secret = data.adminSecret || "";
-  if (!secret || secret !== ADMIN_SECRET) {
-    return jsonResponse({ code: "UNAUTHORIZED", valid: false, reason: "invalid_secret" });
-  }
-
-  var action = (data.action || "").trim().toLowerCase();
-
-  try {
-    if (action === "admin_dashboard_data") return handleAdminDashboardData(data, ss);
-    if (action === "admin_customer_list") return handleAdminCustomerList(data, ss);
-    if (action === "admin_transaction_list") return handleAdminTransactionList(data, ss);
-    if (action === "admin_customer_action") return handleAdminCustomerAction(data, ss);
-    if (action === "admin_health_check") return handleAdminHealthCheck(data, ss);
-    if (action === "admin_integrity_scan") return handleAdminIntegrityScan(data, ss);
-    if (action === "admin_audit_list") return handleAdminAuditList(data, ss);
-
-    return jsonResponse({ valid: false, reason: "unknown_admin_action" });
-  } catch (err) {
-    return jsonResponse({ valid: false, reason: "admin_server_error", message: err.message });
-  }
-}
-
-function handleAdminDashboardData(data, ss) {
-  var totalCount = 0;
-  var basicCount = 0;
-  var proCount = 0;
-  var betaCount = 0;
-  var activeCount = 0;
-  var inactiveCount = 0;
-
-  var tabs = ["Basic", "Pro", "Extreme", "Beta"];
-  for (var i = 0; i < tabs.length; i++) {
-    var sheet = ss.getSheetByName(tabs[i]);
-    if (!sheet) continue;
-    var rows = sheet.getDataRange().getValues();
-    if (rows.length < 2) continue;
-    var COL = getColMap(sheet);
-    
-    for (var r = 1; r < rows.length; r++) {
-      totalCount++;
-      var status = (rows[r][COL["status"]] || "").toString().toLowerCase();
-      if (status === "active") activeCount++;
-      else inactiveCount++;
-
-      if (tabs[i] === "Basic") basicCount++;
-      if (tabs[i] === "Pro") proCount++;
-      if (tabs[i] === "Beta") betaCount++;
-    }
-  }
-
-  var dashboardData = {
-    counts: {
-      total: totalCount,
-      basic: basicCount,
-      pro: proCount,
-      extreme: 0,
-      beta: betaCount,
-      active: activeCount,
-      inactive: inactiveCount
-    },
-    recentTransactions: [], // Will populate if needed
-    systemTime: new Date().toISOString()
-  };
-
-  return jsonResponse(dashboardData);
-}
-
-function handleAdminCustomerList(data, ss) {
-  var tabFilter = (data.tab || "all").toLowerCase();
-  var search = (data.search || "").toLowerCase();
-  
-  var customers = [];
-  var tabsToSearch = tabFilter === "all" ? ["Basic", "Pro", "Extreme", "Beta"] : [PLAN_CONFIG[tabFilter] ? PLAN_CONFIG[tabFilter].sheetName : "Basic"];
-  
-  for (var i = 0; i < tabsToSearch.length; i++) {
-    var sheet = ss.getSheetByName(tabsToSearch[i]);
-    if (!sheet) continue;
-    var rows = sheet.getDataRange().getValues();
-    if (rows.length < 2) continue;
-    var COL = getColMap(sheet);
-
-    for (var r = 1; r < rows.length; r++) {
-      var email = (rows[r][COL["email"]] || "").toString().toLowerCase();
-      var name = (rows[r][COL["name"]] || "").toString();
-      var licenseKey = (rows[r][COL["license_key"]] || "").toString();
-      var plan = (rows[r][COL["plan"]] || "").toString();
-      var status = (rows[r][COL["status"]] || "").toString();
-      var maxDevices = parseInt(rows[r][COL["max_devices"]], 10) || 1;
-      var activatedDevices = (rows[r][COL["activated_devices"]] || "[]").toString();
-      var emailStatus = (rows[r][COL["email_status"]] || "").toString();
-      var expiry = (rows[r][COL["expiry"]] || "").toString();
-
-      if (search && !email.includes(search) && !name.toLowerCase().includes(search) && !licenseKey.toLowerCase().includes(search)) {
-        continue;
-      }
-
-      customers.push({
-        name: name,
-        email: email,
-        licenseKey: licenseKey,
-        plan: plan,
-        status: status,
-        tabName: tabsToSearch[i],
-        maxDevices: maxDevices,
-        activatedDevices: activatedDevices,
-        emailStatus: emailStatus,
-        expiry: expiry
-      });
-    }
-  }
-
-  return jsonResponse({ customers: customers, count: customers.length });
-}
-
-function handleAdminTransactionList(data, ss) {
-  var sheet = ss.getSheetByName(TRANSACTIONS_TAB_NAME);
-  var transactions = [];
-  if (sheet) {
-    var rows = sheet.getDataRange().getValues();
-    if (rows.length > 1) {
-      var COL = getColMap(sheet);
-      for (var r = rows.length - 1; r >= 1; r--) {
-        transactions.push({
-          transactionId: rows[r][COL["transactionid"]],
-          paymentId: rows[r][COL["paymentid"]],
-          orderId: rows[r][COL["orderid"]],
-          email: rows[r][COL["email"]],
-          plan: rows[r][COL["plan"]],
-          amount: rows[r][COL["amount"]],
-          currency: rows[r][COL["currency"]],
-          timestamp: rows[r][COL["timestamp"]],
-          status: rows[r][COL["status"]],
-          licenseKey: rows[r][COL["licensekey"]],
-          actionTaken: rows[r][COL["actiontaken"]],
-          email_status: rows[r][COL["email_status"]]
-        });
-      }
-    }
-  }
-  return jsonResponse({ transactions: transactions, count: transactions.length });
-}
-
-function handleAdminCustomerAction(data, ss) {
-  var subAction = data.subAction;
-  var email = (data.email || "").toLowerCase();
-  if (!subAction || !email) return jsonResponse({ valid: false, reason: "missing_fields" });
-  
-  var userResult = findUserAcrossTabs(ss, email);
-  if (!userResult) return jsonResponse({ valid: false, reason: "user_not_found" });
-
-  var sheet = userResult.sheet;
-  var rowIndex = userResult.rowIndex;
-  var COL = getColMap(sheet);
-
-  if (subAction === "revoke_license") {
-    sheet.getRange(rowIndex, COL["status"] + 1).setValue("revoked");
-    logAdminAudit(ss, "ADM-" + Date.now(), "revoke_license", email, "Customer", {status: "active"}, {status: "revoked"}, data.reason || "");
-    return jsonResponse({ status: "ok", message: "License revoked" });
-  } 
-  else if (subAction === "force_deauthorize_device") {
-    var deviceId = data.deviceId;
-    if (!deviceId) return jsonResponse({ valid: false, reason: "missing_device_id" });
-    
-    var activated = userResult.activated;
-    var index = activated.indexOf(deviceId);
-    if (index > -1) {
-      activated.splice(index, 1);
-      sheet.getRange(rowIndex, COL["activated_devices"] + 1).setValue(JSON.stringify(activated));
-      logAdminAudit(ss, "ADM-" + Date.now(), "force_deauthorize_device", email, "Device", {deviceId: deviceId}, {activated_devices: JSON.stringify(activated)}, data.reason || "");
-      return jsonResponse({ status: "ok", message: "Device deauthorized" });
-    }
-    return jsonResponse({ valid: false, reason: "device_not_found" });
-  }
-  else if (subAction === "resend_email") {
-    var rowData = sheet.getRange(rowIndex, 1, 1, sheet.getLastColumn()).getValues()[0];
-    var plan = (rowData[COL["plan"]] || "basic").toString().toLowerCase();
-    
-    sendLicenseEmail(
-      email, 
-      rowData[COL["name"]], 
-      rowData[COL["license_key"]], 
-      plan,
-      rowData[COL["device_id"]]
-    );
-    
-    sheet.getRange(rowIndex, COL["email_status"] + 1).setValue("resent");
-    logAdminAudit(ss, "ADM-" + Date.now(), "resend_email", email, "Customer", {}, {email_status: "resent"}, "");
-    return jsonResponse({ status: "ok", message: "Email resent" });
-  }
-
-  return jsonResponse({ valid: false, reason: "unknown_subAction" });
-}
-
-function handleAdminHealthCheck(data, ss) {
-  var sheets = ["Basic", "Pro", "Extreme", "Beta", TRANSACTIONS_TAB_NAME, "AdminAuditLog"];
-  for (var i = 0; i < sheets.length; i++) {
-    if (!ss.getSheetByName(sheets[i])) {
-      return jsonResponse({ status: "degraded", message: "Missing sheet: " + sheets[i], timestamp: new Date().toISOString() });
-    }
-  }
-  
-  return jsonResponse({
-    status: "ok",
-    schema: { status: "ok", message: "All database schemas valid" },
-    emailQuotaRemaining: MailApp.getRemainingDailyQuota(),
-    razorpayConfigured: !!(PropertiesService.getScriptProperties().getProperty("RAZORPAY_WEBHOOK_SECRET")),
-    timestamp: new Date().toISOString()
-  });
-}
-
-function handleAdminIntegrityScan(data, ss) {
-  return jsonResponse(runIntegrityScanner(ss));
-}
-
-function handleAdminAuditList(data, ss) {
-  return jsonResponse(getAdminAuditList(ss));
-}
+runTests();

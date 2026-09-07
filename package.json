@@ -1,6 +1,6 @@
 {
   "name": "captiongrit-builder",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Build tools for Captiongrit",
   "scripts": {
     "download-ffmpeg": "node scripts/download_ffmpeg.js",
